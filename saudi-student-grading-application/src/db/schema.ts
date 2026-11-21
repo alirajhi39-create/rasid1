@@ -108,11 +108,31 @@ export const grades = pgTable(
     componentId: integer("component_id")
       .notNull()
       .references(() => gradeComponents.id, { onDelete: "cascade" }),
+    // الفصل الدراسي: 1 = الفصل الأول، 2 = الفصل الثاني
+    semester: integer("semester").notNull().default(1),
+    // الفترة: 1 = الفترة الأولى، 2 = الفترة الثانية
+    period: integer("period").notNull().default(1),
     value: numeric("value", { precision: 6, scale: 2 }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (t) => [
-    uniqueIndex("uq_grade_student_component").on(t.studentId, t.componentId),
+    uniqueIndex("uq_grade_student_component_sem_per").on(t.studentId, t.componentId, t.semester, t.period),
     index("idx_grades_component").on(t.componentId),
+  ]
+);
+
+// ربط المادة بالصف — المادة تظهر فقط في الصفوف المرتبطة بها
+export const subjectGradeLinks = pgTable(
+  "subject_grade_links",
+  {
+    id: serial("id").primaryKey(),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    gradeLabel: text("grade_label").notNull(),
+  },
+  (t) => [
+    uniqueIndex("uq_subject_grade_link").on(t.subjectId, t.gradeLabel),
+    index("idx_subject_grade_link_label").on(t.gradeLabel),
   ]
 );

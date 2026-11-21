@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   LibraryBig, Plus, Trash2, X, Loader2, CheckCircle2, Eye, EyeOff, Save,
-  GripVertical, Calculator, BookOpenCheck, FlaskConical, Pencil, Info,
+  GripVertical, Calculator, BookOpenCheck, FlaskConical, Pencil, Info, GraduationCap,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -13,8 +13,9 @@ type Component = {
 };
 type Subject = {
   id: number; name: string; max_total: string | number; pass_score: string | number;
-  color: string; is_active: boolean; components: Component[];
+  color: string; is_active: boolean; components: Component[]; grade_labels?: string[];
 };
+type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 
 const CATEGORY_META = {
   formative: { label: "أعمال السنة", hint: "يُفترض أن يكون مجموعها 60", tone: "bg-teal-50 text-teal-800 ring-teal-200" },
@@ -26,9 +27,11 @@ const PALETTE = ["#0e5c3a", "#0f766e", "#1d4ed8", "#be123d", "#8a5a00", "#4338ca
 
 export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classMeta, setClassMeta] = useState<ClassItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingDist, setSavingDist] = useState(false);
+  const [savingLinks, setSavingLinks] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PALETTE[0]);
@@ -37,6 +40,12 @@ export default function SubjectsPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
+  const loadClasses = async () => {
+    const r = await fetch("/api/classes", { cache: "no-store" });
+    const d = await r.json();
+    if (d.ok) setClassMeta(d.classes);
+  };
+
   const load = async () => {
     const r = await fetch("/api/subjects", { cache: "no-store" });
     const d = await r.json();
@@ -44,6 +53,7 @@ export default function SubjectsPage() {
       const list: Subject[] = d.subjects.map((s: Subject) => ({
         ...s,
         components: (s.components ?? []).map((c) => ({ ...c, maxScore: Number(c.maxScore), isActive: Boolean(c.isActive) })),
+        grade_labels: s.grade_labels ?? [],
       }));
       setSubjects(list);
       if (list.length && (selectedId === null || !list.find((s) => s.id === selectedId))) {
@@ -52,7 +62,35 @@ export default function SubjectsPage() {
     }
     setLoading(false);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { load(); loadClasses(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const allGradeLabels = useMemo(
+    () => [...new Set(classMeta.map((c) => c.grade_label))],
+    [classMeta]
+  );
+
+  const setLinks = async (subject: Subject, gradeLabels: string[]) => {
+    setSavingLinks(true);
+    // تحديث تفاؤلي
+    setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, grade_labels: gradeLabels } : s)));
+    const r = await fetch(`/api/subjects/${subject.id}/links`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gradeLabels }),
+    });
+    const d = await r.json();
+    setSavingLinks(false);
+    if (!d.ok) {
+      toast("تعذر حفظ الربط", "error");
+      load();
+    }
+  };
+
+  const toggleLink = (subject: Subject, label: string) => {
+    const current = new Set(subject.grade_labels ?? []);
+    if (current.has(label)) current.delete(label); else current.add(label);
+    setLinks(subject, [...current]);
+  };
 
   const selected = subjects.find((s) => s.id === selectedId) ?? null;
 
@@ -169,6 +207,9 @@ export default function SubjectsPage() {
                       {activeCount} خانة مفعّلة · العظمى {Number(s.max_total)}
                       {!s.is_active && " · موقوفة"}
                     </span>
+                    <span className={`mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.58rem] font-bold ${(s.grade_labels?.length ?? 0) === 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-300" : "bg-emerald-50 text-emerald-800"}`}>
+                      {(s.grade_labels?.length ?? 0) === 0 ? "غير مرتبطة بأي صف!" : `تظهر في ${s.grade_labels!.length} صف/مرحلة`}
+                    </span>
                   </span>
                   {active && <span className="h-2.5 w-2.5 rounded-full bg-[#0e5c3a]" />}
                 </button>
@@ -222,6 +263,47 @@ export default function SubjectsPage() {
                   <Trash2 size={17} />
                 </button>
               </div>
+            </div>
+
+            {/* ربط المادة بالصفوف — تظهر فقط في الصفوف المحددة */}
+            <div className="border-b border-[#eef0ea] bg-white px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]">
+                    <GraduationCap size={14} className="text-[#c9a24b]" /> الصفوف التي تظهر فيها المادة
+                    {savingLinks && <Loader2 size={12} className="animate-spin text-[#5c6f65]" />}
+                  </span>
+                  <span className="mt-0.5 block text-[0.58rem] font-semibold text-[#8a968d]">فعّل الصفوف المطلوبة — المادة لن تظهر في غيرها (الرصد والتقارير والتصدير)</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <button className="btn btn-ghost !px-2.5 !py-1 text-[0.62rem]" onClick={() => setLinks(selected, [...allGradeLabels])}>ربط الكل</button>
+                  <button className="btn btn-ghost !px-2.5 !py-1 text-[0.62rem]" onClick={() => setLinks(selected, [])}>إلغاء الكل</button>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {allGradeLabels.length === 0 && (
+                  <span className="text-[0.68rem] font-bold text-[#8a968d]">لا توجد فصول بعد — أضف فصلاً من صفحة الفصول ليظهر هنا</span>
+                )}
+                {allGradeLabels.map((label) => {
+                  const linked = (selected.grade_labels ?? []).includes(label);
+                  return (
+                    <button key={label} onClick={() => toggleLink(selected, label)}
+                      aria-pressed={linked}
+                      className={`rounded-xl border px-3 py-1.5 text-[0.68rem] font-extrabold transition-all ${
+                        linked
+                          ? "border-[#0e5c3a] bg-[#0e5c3a] text-[#e7cf9a] shadow-md"
+                          : "border-[#dfe2da] bg-[#fbfbf8] text-[#5c6f65] hover:border-[#0e5c3a]/50"
+                      }`}>
+                      {linked ? "✓ " : ""}{label}
+                    </button>
+                  );
+                })}
+              </div>
+              {(selected.grade_labels ?? []).length === 0 && (
+                <div className="mt-2 flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[0.62rem] font-bold text-amber-800">
+                  <Info size={12} /> هذه المادة غير مرتبطة بأي صف — لن تظهر في الرصد ولا في التقارير حتى تربطها بصف واحد على الأقل.
+                </div>
+              )}
             </div>
 
             {/* ملخص المطابقة مع اللائحة */}

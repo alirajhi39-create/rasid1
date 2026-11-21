@@ -5,12 +5,12 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
-type SubjectItem = { id: number; name: string; color: string; is_active: boolean };
+type SubjectItem = { id: number; name: string; color: string; is_active: boolean; grade_labels?: string[] };
 type Component = { id: number; name: string; category: string; max_score: number; weight_label: string; is_active: boolean };
 type StudentRow = { id: number; full_name: string; national_id: string };
 type SubjectInfo = { id: number; name: string; max_total: string | number; pass_score: string | number; color: string };
@@ -18,7 +18,15 @@ type TeacherInfo = {
   full_name: string; school_name: string; education_admin: string; education_office: string;
   city: string; principal_name: string; academic_year: string; semester: string; job_title: string;
 };
-type TabKey = "sheet" | "notices" | "analysis";
+type YearRow = {
+  s: StudentRow; s1p1: number; s1p2: number; s2p1: number; s2p2: number;
+  sem1: number; sem2: number; yearTotal: number; avg: number; percent: number;
+  semMax: number; yearMax: number;
+};
+type TabKey = "sheet" | "notices" | "analysis" | "year";
+
+const SEMESTERS: Record<string, string> = { "1": "الفصل الدراسي الأول", "2": "الفصل الدراسي الثاني" };
+const PERIODS: Record<string, string> = { "1": "الفترة الأولى", "2": "الفترة الثانية" };
 
 function band(pct: number) {
   if (pct >= 90) return { label: "ممتاز", comment: "أداء متميز — نرجو المحافظة على التفوق" };
@@ -30,45 +38,31 @@ function band(pct: number) {
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
-/** شعار وزارة التعليم (مبسّط): نخلة متقاطعة مع سيفين في إطار دائري */
-function EducationEmblem({ size = 74 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 96 96" role="img" aria-label="شعار وزارة التعليم">
-      <circle cx="48" cy="48" r="46" fill="#0a4630" stroke="#c9a24b" strokeWidth="3.5" />
-      <circle cx="48" cy="48" r="37.5" fill="none" stroke="#c9a24b" strokeWidth="1.1" opacity="0.85" />
-      {/* السيفان المتقاطعان */}
-      <g stroke="#e7cf9a" strokeWidth="2.6" strokeLinecap="round" fill="none">
-        <path d="M22 62 Q48 74 74 62" />
-        <path d="M20 56 L27 66" />
-        <path d="M76 56 L69 66" />
-      </g>
-      {/* النخلة */}
-      <g fill="#e7cf9a">
-        <path d="M48 18 c-2.2 4.5 -2.2 9 0 13.5 c2.2 -4.5 2.2 -9 0 -13.5 Z" />
-        <path d="M36 22 c4.4 2.4 7.8 6.4 9.4 11.8 c-5.6 -0.9 -9.4 -5 -9.4 -11.8 Z" />
-        <path d="M60 22 c-4.4 2.4 -7.8 6.4 -9.4 11.8 c5.6 -0.9 9.4 -5 9.4 -11.8 Z" />
-        <path d="M27 32 c5.2 1.6 8.8 5.7 10.4 11.2 c-5.5 -0.6 -9.3 -4.6 -10.4 -11.2 Z" />
-        <path d="M69 32 c-5.2 1.6 -8.8 5.7 -10.4 11.2 c5.5 -0.6 9.3 -4.6 10.4 -11.2 Z" />
-        <path d="M45.5 33 h5 l-0.9 18 h-3.2 Z" />
-      </g>
-    </svg>
-  );
-}
-
 function ReportsInner() {
   const searchParams = useSearchParams();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [classId, setClassId] = useState(searchParams.get("classId") ?? "");
   const [subjectId, setSubjectId] = useState(searchParams.get("subjectId") ?? "");
+  const [semester, setSemester] = useState(searchParams.get("semester") ?? "1");
+  const [period, setPeriod] = useState(searchParams.get("period") ?? "1");
   const [tab, setTab] = useState<TabKey>("sheet");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
   const [subject, setSubject] = useState<SubjectInfo | null>(null);
   const [grades, setGrades] = useState<Record<number, Record<number, number | null>>>({});
+  const [yearRows, setYearRows] = useState<YearRow[]>([]);
+  const [yearPeriodMax, setYearPeriodMax] = useState(100);
   const [teacher, setTeacher] = useState<TeacherInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  // المواد الظاهرة = المرتبطة بصف الفصل المختار فقط
+  const activeClassGradeLabel = classes.find((c) => String(c.id) === classId)?.grade_label ?? "";
+  const linkedSubjects = useMemo(
+    () => subjects.filter((s) => !activeClassGradeLabel || (s.grade_labels ?? []).includes(activeClassGradeLabel)),
+    [subjects, activeClassGradeLabel]
+  );
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => d.ok && setTeacher(d.teacher));
@@ -79,18 +73,23 @@ function ReportsInner() {
       }
     });
     fetch("/api/subjects", { cache: "no-store" }).then((r) => r.json()).then((d) => {
-      if (d.ok) {
-        setSubjects(d.subjects.filter((s: SubjectItem) => s.is_active));
-        if (!subjectId && d.subjects[0]) setSubjectId(String(d.subjects[0].id));
-      }
+      if (d.ok) setSubjects(d.subjects.filter((s: SubjectItem) => s.is_active));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ضمان اختيار مادة مرتبطة عند تغيّر الفصل
+  useEffect(() => {
+    if (linkedSubjects.length > 0 && !linkedSubjects.some((s) => String(s.id) === subjectId)) {
+      setSubjectId(String(linkedSubjects[0].id));
+    }
+  }, [linkedSubjects, subjectId]);
+
+  // بيانات الكشف المحدد (فصل + فترة)
   useEffect(() => {
     if (!classId || !subjectId) return;
     setLoading(true);
-    fetch(`/api/grades?classId=${classId}&subjectId=${subjectId}`, { cache: "no-store" })
+    fetch(`/api/grades?classId=${classId}&subjectId=${subjectId}&semester=${semester}&period=${period}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (d.ok) {
@@ -101,12 +100,25 @@ function ReportsInner() {
         }
       })
       .finally(() => setLoading(false));
-  }, [classId, subjectId]);
+  }, [classId, subjectId, semester, period]);
+
+  // بيانات ملخص العام (الفصلان والفترتان) — يُحمَّل عند فتح التبويب
+  useEffect(() => {
+    if (!classId || !subjectId || tab !== "year") return;
+    fetch(`/api/grades/year?classId=${classId}&subjectId=${subjectId}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) { setYearRows(d.rows); setYearPeriodMax(d.periodMax); }
+      });
+  }, [classId, subjectId, tab]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const passScore = subject ? Number(subject.pass_score) : 50;
   const activeClass = classes.find((c) => String(c.id) === classId);
   const classLabel = activeClass ? `${activeClass.grade_label} — فصل ${activeClass.name}` : "";
+  const semesterLabel = SEMESTERS[semester] ?? "الفصل الدراسي الأول";
+  const periodLabel = PERIODS[period] ?? "الفترة الأولى";
+  const axisLabel = `${semesterLabel} · ${periodLabel}`;
   const today = new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   const rows = useMemo(() => students.map((s) => {
@@ -124,12 +136,16 @@ function ReportsInner() {
   const passCount = rows.filter((r) => r.total >= passScore && r.filled > 0).length;
   const gradedCount = rows.filter((r) => r.filled > 0).length;
 
+  const passingYear = yearRows.filter((r) => r.avg >= passScore).length;
+  const gradedYear = yearRows.filter((r) => r.yearTotal > 0).length;
+  const yearAvg = yearRows.length ? yearRows.reduce((a, r) => a + r.percent, 0) / yearRows.length : 0;
+
   // ============ تصدير Excel مطابق لقالب نور ============
   const exportNoor = () => {
     if (!subject || !teacher) return;
     setExporting(true);
     try {
-      const title = `كشف رصد درجات مادة ${subject.name} — ${classLabel}`;
+      const title = `كشف رصد درجات مادة ${subject.name} — ${classLabel} — ${axisLabel}`;
       const header = ["م", "رقم السجل المدني", "اسم الطالب",
         ...components.map((c) => `${c.name} (${fmt(Number(c.max_score))})`),
         `المجموع (${fmt(maxTotal)})`, "النسبة %", "التقدير"];
@@ -139,7 +155,7 @@ function ReportsInner() {
         [teacher.education_admin],
         [`${teacher.school_name} — ${teacher.city}`],
         [title],
-        [`${teacher.semester} · العام الدراسي ${teacher.academic_year} · المعلم: ${teacher.full_name}`],
+        [`${semesterLabel} · ${periodLabel} · العام الدراسي ${teacher.academic_year} · المعلم: ${teacher.full_name}`],
         [],
         header,
         ...rows.map((r, i) => [
@@ -162,7 +178,7 @@ function ReportsInner() {
       const wb = XLSX.utils.book_new();
       wb.Workbook = { Views: [{ RTL: true }] };
       XLSX.utils.book_append_sheet(wb, ws, "رصد الدرجات");
-      const fileName = `نور-${subject.name}-${activeClass?.grade_label ?? ""}-${activeClass?.name ?? ""}-${teacher.semester}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
+      const fileName = `نور-${subject.name}-${activeClass?.grade_label ?? ""}-${activeClass?.name ?? ""}-فصل${semester}-فترة${period}.xlsx`.replace(/[\\/:*?"<>|]/g, "-");
       XLSX.writeFile(wb, fileName);
       toast("تم تصدير ملف Excel مطابق لقالب نور");
     } catch (err) {
@@ -177,6 +193,7 @@ function ReportsInner() {
     { key: "sheet", label: "كشف الرصد الرسمي", icon: Table2 },
     { key: "notices", label: "الإشعارات الفردية", icon: UserRound },
     { key: "analysis", label: "تحليل أداء الفصل", icon: BarChart3 },
+    { key: "year", label: "ملخص الفصلين والعام", icon: Sigma },
   ];
 
   return (
@@ -186,7 +203,7 @@ function ReportsInner() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-xl font-black text-[#0a4630]"><FileText className="text-[#c9a24b]" /> التقارير والطباعة والتصدير</h2>
-            <p className="text-[0.72rem] font-semibold text-[#5c6f65]">كشوف رسمية بترويسة وزارة التعليم — جاهزة للطباعة والتصدير لنظام نور</p>
+            <p className="text-[0.72rem] font-semibold text-[#5c6f65]">كشوف رسمية بترويسة وزارة التعليم — الفصلان الدراسيان · الفترة الأولى والثانية — جاهزة للطباعة والتصدير لنور</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={exportNoor} disabled={exporting || loading} className="btn btn-gold">
@@ -209,10 +226,23 @@ function ReportsInner() {
           <label className="flex items-center gap-2">
             <span className="text-[0.7rem] font-extrabold text-[#5c6f65]">المادة</span>
             <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="input !w-auto font-bold">
-              {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {linkedSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
-          <div className="ms-auto flex gap-1 rounded-xl bg-[#eef1ec] p-1">
+          <label className="flex items-center gap-2">
+            <CalendarRange size={15} className="text-[#5c6f65]" />
+            <select value={semester} onChange={(e) => setSemester(e.target.value)} className="input !w-auto font-bold" aria-label="الفصل الدراسي">
+              <option value="1">الفصل الدراسي الأول</option>
+              <option value="2">الفصل الدراسي الثاني</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="input !w-auto font-bold" aria-label="الفترة">
+              <option value="1">الفترة الأولى</option>
+              <option value="2">الفترة الثانية</option>
+            </select>
+          </label>
+          <div className="ms-auto flex flex-wrap gap-1 rounded-xl bg-[#eef1ec] p-1">
             {TABS.map((t) => {
               const Icon = t.icon;
               const active = tab === t.key;
@@ -225,21 +255,27 @@ function ReportsInner() {
             })}
           </div>
         </div>
-        {!loading && gradedCount === 0 && (
+        {linkedSubjects.length === 0 && (
           <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-[0.72rem] font-bold text-amber-800">
-            <AlertCircle size={15} /> لا توجد درجات مرصودة لهذه المادة بعد — ستُطبع الخلايا فارغة. ارصد الدرجات أولاً من صفحة «رصد الدرجات».
+            <AlertCircle size={15} /> لا توجد مواد مرتبطة بصف هذا الفصل — اربط المواد من «المواد والتوزيع» لتظهر هنا.
+          </div>
+        )}
+        {tab !== "year" && !loading && gradedCount === 0 && linkedSubjects.length > 0 && (
+          <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-[0.72rem] font-bold text-amber-800">
+            <AlertCircle size={15} /> لا توجد درجات مرصودة لهذا النطاق (الفصل/الفترة) — ستُطبع الخلايا فارغة.
           </div>
         )}
       </div>
 
       {/* ===== منطقة الطباعة ===== */}
-      {loading ? (
+      {loading && tab !== "year" ? (
         <div className="shimmer no-print h-96 rounded-3xl" />
       ) : (
         <div className="print-area">
           {tab === "sheet" && (
             <div className="print-sheet">
-              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today} docTitle={`كشف رصد درجات مادة ${subject?.name ?? ""}`} />
+              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
+                docTitle={`كشف رصد درجات مادة ${subject?.name ?? ""}`} axisLabel={axisLabel} />
               <table className="sheet-table">
                 <thead>
                   <tr>
@@ -293,7 +329,8 @@ function ReportsInner() {
             <div>
               {rows.map((r, i) => (
                 <div key={r.s.id} className={`print-sheet ${i < rows.length - 1 ? "page-break" : ""} mb-6`}>
-                  <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today} docTitle="إشعار درجات الطالب" />
+                  <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
+                    docTitle="إشعار درجات الطالب" axisLabel={axisLabel} />
                   <div className="mb-3 grid grid-cols-2 gap-2 text-[0.75rem] sm:grid-cols-4">
                     {[
                       ["اسم الطالب", r.s.full_name],
@@ -327,7 +364,7 @@ function ReportsInner() {
                   <div className="mt-3 rounded-xl border border-dashed border-[#c9a24b] bg-[#fffdf2] p-3 text-[0.78rem] font-bold text-[#6b5518]">
                     <span className="text-[#a8843a]">تعليق المعلم: </span>{r.filled > 0 ? r.band.comment : "لم تُرصد درجاته بعد"}
                   </div>
-                  <SignatureRow teacher={teacher} notice />
+                  <SignatureRow teacher={teacher} />
                 </div>
               ))}
               {rows.length === 0 && <p className="no-print card p-10 text-center text-sm font-bold text-[#8a968d]">لا يوجد طلاب في هذا الفصل</p>}
@@ -336,7 +373,8 @@ function ReportsInner() {
 
           {tab === "analysis" && (
             <div className="print-sheet">
-              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today} docTitle="تقرير تحليل أداء الفصل" />
+              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
+                docTitle="تقرير تحليل أداء الفصل" axisLabel={axisLabel} />
               <table className="sheet-table">
                 <thead>
                   <tr><th>الخانة</th><th>العظمى</th><th>متوسط الكشف</th><th>أعلى درجة</th><th>أدنى درجة</th><th>نسبة الإتقان ≥ 60%</th></tr>
@@ -387,6 +425,82 @@ function ReportsInner() {
               <SignatureRow teacher={teacher} />
             </div>
           )}
+
+          {tab === "year" && (
+            <div className="print-sheet">
+              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
+                docTitle="كشف العام — مجموع الفصلين والمتوسط" axisLabel={teacher?.semester ?? "الفصل الدراسي"} />
+              <table className="sheet-table" style={{ fontSize: "0.62rem" }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2}>م</th>
+                    <th rowSpan={2}>رقم السجل المدني</th>
+                    <th rowSpan={2}>اسم الطالب</th>
+                    <th colSpan={3}>الفصل الدراسي الأول</th>
+                    <th colSpan={3}>الفصل الدراسي الثاني</th>
+                    <th colSpan={4}>محصلة العام</th>
+                  </tr>
+                  <tr>
+                    <th>الفترة الأولى<br />({fmt(yearPeriodMax)})</th>
+                    <th>الفترة الثانية<br />({fmt(yearPeriodMax)})</th>
+                    <th>المجموع<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>الفترة الأولى<br />({fmt(yearPeriodMax)})</th>
+                    <th>الفترة الثانية<br />({fmt(yearPeriodMax)})</th>
+                    <th>المجموع<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>مجموع<br />الفصلين<br />({fmt(yearPeriodMax * 4)})</th>
+                    <th>المتوسط<br />({fmt(yearPeriodMax)})</th>
+                    <th>النسبة</th>
+                    <th>التقدير</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yearRows.map((r, i) => {
+                    const b = band(r.percent);
+                    const failing = r.yearTotal > 0 && r.avg < passScore;
+                    return (
+                      <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
+                        <td>{i + 1}</td>
+                        <td dir="ltr">{r.s.national_id || "—"}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
+                        <td>{r.s1p1 > 0 ? fmt(r.s1p1) : ""}</td>
+                        <td>{r.s1p2 > 0 ? fmt(r.s1p2) : ""}</td>
+                        <td style={{ fontWeight: 700 }}>{r.sem1 > 0 ? fmt(r.sem1) : ""}</td>
+                        <td>{r.s2p1 > 0 ? fmt(r.s2p1) : ""}</td>
+                        <td>{r.s2p2 > 0 ? fmt(r.s2p2) : ""}</td>
+                        <td style={{ fontWeight: 700 }}>{r.sem2 > 0 ? fmt(r.sem2) : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.yearTotal) : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.avg) : ""}</td>
+                        <td style={{ background: "#f6f8f3" }}>{r.yearTotal > 0 ? `${r.percent.toFixed(1)}%` : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? b.label : ""}</td>
+                      </tr>
+                    );
+                  })}
+                  {yearRows.length === 0 && (
+                    <tr><td colSpan={13} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد لهذه المادة بعد</td></tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                    <td colSpan={3}>المتوسط / عدد الناجحين</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p2, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem1, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s2p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s2p2, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem2, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.yearTotal, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.avg, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? `${yearAvg.toFixed(1)}%` : "—"}</td>
+                    <td>{gradedYear > 0 ? `${passingYear} / ${gradedYear}` : "—"}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <p style={{ marginTop: "0.5rem", fontSize: "0.62rem", fontWeight: 600, color: "#555" }}>
+                * درجة كل فترة من {fmt(yearPeriodMax)} · مجموع الفصل من {fmt(yearPeriodMax * 2)} · مجموع الفصلين من {fmt(yearPeriodMax * 4)} · المتوسط من {fmt(yearPeriodMax)} · التقدير حسب المتوسط ({passScore} درجة للنجاح).
+              </p>
+              <SignatureRow teacher={teacher} />
+            </div>
+          )}
         </div>
       )}
 
@@ -400,9 +514,9 @@ function ReportsInner() {
   );
 }
 
-/** ترويسة وزارة التعليم المشتركة */
-function SheetHeader({ teacher, subjectName, classLabel, today, docTitle }: {
-  teacher: TeacherInfo | null; subjectName: string; classLabel: string; today: string; docTitle: string;
+/** ترويسة وزارة التعليم المشتركة — بشعار وزارة التعليم الرسمي */
+function SheetHeader({ teacher, subjectName, classLabel, today, docTitle, axisLabel }: {
+  teacher: TeacherInfo | null; subjectName: string; classLabel: string; today: string; docTitle: string; axisLabel: string;
 }) {
   return (
     <>
@@ -413,7 +527,11 @@ function SheetHeader({ teacher, subjectName, classLabel, today, docTitle }: {
           <span style={{ fontSize: "0.68rem" }}>{teacher?.education_admin}</span><br />
           <span style={{ fontSize: "0.68rem" }}>{teacher?.education_office}</span>
         </div>
-        <div className="col"><EducationEmblem size={78} /></div>
+        <div className="col" style={{ flexShrink: 0 }}>
+          {/* شعار وزارة التعليم الرسمي */}
+          <img src="/images/moe-logo.svg" alt="شعار وزارة التعليم" width={132} height={68}
+            style={{ objectFit: "contain", display: "block", margin: "0 auto" }} />
+        </div>
         <div className="col" style={{ textAlign: "left", flex: 1 }}>
           <strong style={{ fontSize: "0.82rem" }}>{teacher?.school_name}</strong><br />
           <span style={{ fontSize: "0.68rem" }}>إدارة المدرسة · {teacher?.city}</span><br />
@@ -424,15 +542,15 @@ function SheetHeader({ teacher, subjectName, classLabel, today, docTitle }: {
       <div className="doc-title">
         {docTitle}
         <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#333", marginTop: 2 }}>
-          {classLabel} · المادة: {subjectName} · المعلم: {teacher?.full_name} ({teacher?.job_title})
+          {classLabel} · المادة: {subjectName} · {axisLabel} · المعلم: {teacher?.full_name} ({teacher?.job_title})
         </div>
       </div>
     </>
   );
 }
 
-/** صف التوقيعات */
-function SignatureRow({ teacher, notice = false }: { teacher: TeacherInfo | null; notice?: boolean }) {
+/** صف التوقيعات — معلم المادة ومدير المدرسة فقط */
+function SignatureRow({ teacher }: { teacher: TeacherInfo | null }) {
   return (
     <div className="sign-row">
       <div className="sign-box">
@@ -440,13 +558,6 @@ function SignatureRow({ teacher, notice = false }: { teacher: TeacherInfo | null
         <div className="sign-line" />
         <div style={{ fontSize: "0.72rem" }}>{teacher?.full_name}</div>
       </div>
-      {!notice && (
-        <div className="sign-box">
-          <div style={{ fontWeight: 800, fontSize: "0.72rem" }}>رائد النشاط / ولي الأمر</div>
-          <div className="sign-line" />
-          <div style={{ fontSize: "0.72rem" }}>الاسم والتوقيع</div>
-        </div>
-      )}
       <div className="sign-box">
         <div style={{ fontWeight: 800, fontSize: "0.72rem" }}>مدير المدرسة</div>
         <div className="sign-line" />

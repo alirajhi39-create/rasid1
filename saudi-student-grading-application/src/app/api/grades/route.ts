@@ -5,7 +5,14 @@ import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-/** بيانات شبكة الرصد: طلاب الفصل + خانات المادة + الدرجات المحفوظة (لكل معلم معزولاً) */
+const SEMESTERS = new Set([1, 2]);
+const PERIODS = new Set([1, 2]);
+const cleanAxis = (v: string | null, allowed: Set<number>): number => {
+  const n = Number(v);
+  return allowed.has(n) ? n : 1;
+};
+
+/** بيانات شبكة الرصد: طلاب الفصل + خانات المادة + الدرجات (حسب الفصل الدراسي والفترة) */
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ ok: false, error: "غير مصرح" }, { status: 401 });
@@ -13,17 +20,28 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const classId = Number(url.searchParams.get("classId"));
   const subjectId = Number(url.searchParams.get("subjectId"));
+  const semester = cleanAxis(url.searchParams.get("semester"), SEMESTERS);
+  const period = cleanAxis(url.searchParams.get("period"), PERIODS);
   if (!classId || !subjectId) {
     return Response.json({ ok: false, error: "الفصل والمادة مطلوبان" }, { status: 400 });
   }
 
-  // تحقق الملكية: الفصل والمادة يجب أن يخصا نفس المعلم
+  // تحقق الملكية: الفصل والمادة يخصان المعلم نفسه
   const [classOwn, subjectOwn] = await Promise.all([
-    db.execute(sql`SELECT 1 FROM classes WHERE id = ${classId} AND teacher_id = ${session.sub} LIMIT 1`),
+    db.execute(sql`SELECT name, grade_label FROM classes WHERE id = ${classId} AND teacher_id = ${session.sub} LIMIT 1`),
     db.execute(sql`SELECT 1 FROM subjects WHERE id = ${subjectId} AND teacher_id = ${session.sub} LIMIT 1`),
   ]);
   if (classOwn.rows.length === 0 || subjectOwn.rows.length === 0) {
     return Response.json({ ok: false, error: "الفصل أو المادة غير موجودان" }, { status: 404 });
+  }
+
+  // تحقق الربط: المادة يجب أن تكون مرتبطة بصف هذا الفصل
+  const gradeLabel = String((classOwn.rows[0] as { grade_label: string }).grade_label);
+  const linkCheck = await db.execute(sql`
+    SELECT 1 FROM subject_grade_links WHERE subject_id = ${subjectId} AND grade_label = ${gradeLabel} LIMIT 1
+  `);
+  if (linkCheck.rows.length === 0) {
+    return Response.json({ ok: false, error: "هذه المادة غير مرتبطة بهذا الصف — اربطها من صفحة المواد والتوزيع", notLinked: true }, { status: 400 });
   }
 
   const [students, subject, components] = await Promise.all([
@@ -50,6 +68,7 @@ export async function GET(req: Request) {
     const g = await db.execute(sql`
       SELECT student_id, component_id, value FROM grades
       WHERE student_id = ANY(ARRAY[${sql.raw(idList)}]::int[])
+        AND semester = ${semester} AND period = ${period}
     `);
     gradesRows = g.rows as unknown as typeof gradesRows;
   }
@@ -62,6 +81,8 @@ export async function GET(req: Request) {
 
   return Response.json({
     ok: true,
+    semester,
+    period,
     students: students.rows,
     subject: subject.rows[0] ?? null,
     components: components.rows,
@@ -69,12 +90,14 @@ export async function GET(req: Request) {
   });
 }
 
-/** حفظ جماعي تلقائي (Auto-save) — يقبل فقط خانات وطلاب المعلم نفسه */
+/** حفظ جماعي تلقائي (Auto-save) — يقبل فقط خانات وطلاب المعلم نفسه، وللفصل/الفترة المحددين */
 export async function PUT(req: Request) {
   const session = await getSession();
   if (!session) return Response.json({ ok: false, error: "غير مصرح" }, { status: 401 });
   await ensureInitialized();
   const body = await req.json().catch(() => ({}));
+  const semester = cleanAxis(body?.semester !== undefined ? String(body.semester) : null, SEMESTERS);
+  const period = cleanAxis(body?.period !== undefined ? String(body.period) : null, PERIODS);
   const entries = Array.isArray(body?.entries)
     ? (body.entries as Array<{ studentId: unknown; componentId: unknown; value: unknown }>)
     : null;
@@ -109,12 +132,13 @@ export async function PUT(req: Request) {
     if (value === null) {
       await db.execute(sql`
         DELETE FROM grades WHERE student_id = ${studentId} AND component_id = ${componentId}
+          AND semester = ${semester} AND period = ${period}
       `);
     } else {
       await db.execute(sql`
-        INSERT INTO grades (student_id, component_id, value, updated_at)
-        VALUES (${studentId}, ${componentId}, ${value}, now())
-        ON CONFLICT (student_id, component_id)
+        INSERT INTO grades (student_id, component_id, semester, period, value, updated_at)
+        VALUES (${studentId}, ${componentId}, ${semester}, ${period}, ${value}, now())
+        ON CONFLICT (student_id, component_id, semester, period)
         DO UPDATE SET value = EXCLUDED.value, updated_at = now()
       `);
     }

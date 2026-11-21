@@ -9,7 +9,7 @@ import {
 import { toast } from "@/components/AppShell";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
-type SubjectItem = { id: number; name: string; color: string; is_active: boolean };
+type SubjectItem = { id: number; name: string; color: string; is_active: boolean; grade_labels?: string[] };
 type Component = { id: number; name: string; category: string; max_score: number; weight_label: string; is_active: boolean };
 type StudentRow = { id: number; full_name: string; national_id: string };
 type SubjectInfo = { id: number; name: string; max_total: string | number; pass_score: string | number; color: string };
@@ -35,6 +35,9 @@ export default function GradesPage() {
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [classId, setClassId] = useState<string>("");
   const [subjectId, setSubjectId] = useState<string>("");
+  const [semester, setSemester] = useState<string>("1");
+  const [period, setPeriod] = useState<string>("1");
+  const [notLinked, setNotLinked] = useState(false);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
   const [subject, setSubject] = useState<SubjectInfo | null>(null);
@@ -54,16 +57,32 @@ export default function GradesPage() {
       if (d.ok) { setClasses(d.classes); if (d.classes[0]) setClassId(String(d.classes[0].id)); }
     });
     fetch("/api/subjects", { cache: "no-store" }).then((r) => r.json()).then((d) => {
-      if (d.ok) { setSubjects(d.subjects.filter((s: SubjectItem) => s.is_active)); if (d.subjects[0]) setSubjectId(String(d.subjects[0].id)); }
+      if (d.ok) setSubjects(d.subjects.filter((s: SubjectItem) => s.is_active));
     });
   }, []);
+
+  // المواد الظاهرة = المرتبطة بصف الفصل المختار فقط
+  const activeClassGradeLabel = classes.find((c) => String(c.id) === classId)?.grade_label ?? "";
+  const linkedSubjects = useMemo(
+    () => subjects.filter((s) => !activeClassGradeLabel || (s.grade_labels ?? []).includes(activeClassGradeLabel)),
+    [subjects, activeClassGradeLabel]
+  );
+
+  // لو تغير الفصل وما عادت المادة المختارة مرتبطة بصفه — اختر أول مادة مرتبطة
+  useEffect(() => {
+    if (linkedSubjects.length > 0 && !linkedSubjects.some((s) => String(s.id) === subjectId)) {
+      setSubjectId(String(linkedSubjects[0].id));
+    }
+  }, [linkedSubjects, subjectId]);
 
   const loadGrid = useCallback(async () => {
     if (!classId || !subjectId) return;
     setLoadingGrid(true);
     setSaveState("idle");
-    const r = await fetch(`/api/grades?classId=${classId}&subjectId=${subjectId}`, { cache: "no-store" });
+    setNotLinked(false);
+    const r = await fetch(`/api/grades?classId=${classId}&subjectId=${subjectId}&semester=${semester}&period=${period}`, { cache: "no-store" });
     const d = await r.json();
+    if (d.notLinked) { setNotLinked(true); setStudents([]); setLoadingGrid(false); return; }
     if (d.ok) {
       setStudents(d.students);
       setSubject(d.subject);
@@ -80,7 +99,7 @@ export default function GradesPage() {
       setDirty(new Set());
     } else toast(d.error ?? "تعذر تحميل الشبكة", "error");
     setLoadingGrid(false);
-  }, [classId, subjectId]);
+  }, [classId, subjectId, semester, period]);
 
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
@@ -144,7 +163,7 @@ export default function GradesPage() {
       const r = await fetch("/api/grades", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries }),
+        body: JSON.stringify({ entries, semester: Number(semester), period: Number(period) }),
       });
       const d = await r.json();
       if (d.ok) {
@@ -158,7 +177,7 @@ export default function GradesPage() {
       setSaveState("error");
       setDirty(new Set(pending));
     }
-  }, [values]);
+  }, [values, semester, period]);
 
   // مرجع دائم لآخر نسخة من flush (حتى لا تعتمد المهلة على قيم قديمة)
   const flushRef = useRef(flush);
@@ -221,7 +240,7 @@ export default function GradesPage() {
   }, [students, query]);
 
   const activeClass = classes.find((c) => String(c.id) === classId);
-  const activeSubject = subjects.find((s) => String(s.id) === subjectId);
+  const activeSubject = linkedSubjects.find((s) => String(s.id) === subjectId) ?? subjects.find((s) => String(s.id) === subjectId);
 
   return (
     <div className="space-y-4">
@@ -245,7 +264,7 @@ export default function GradesPage() {
           </span>
           <button onClick={() => { if (debounceRef.current) clearTimeout(debounceRef.current); flushRef.current(); }} className="btn btn-ghost !py-2 text-[0.75rem]"><RefreshCw size={15} /> حفظ الآن</button>
           {classId && subjectId && (
-            <Link href={`/reports?classId=${classId}&subjectId=${subjectId}`} className="btn btn-primary !py-2 text-[0.75rem]"><Printer size={15} /> طباعة الكشف</Link>
+            <Link href={`/reports?classId=${classId}&subjectId=${subjectId}&semester=${semester}&period=${period}`} className="btn btn-primary !py-2 text-[0.75rem]"><Printer size={15} /> طباعة الكشف</Link>
           )}
         </div>
       </div>
@@ -265,7 +284,27 @@ export default function GradesPage() {
           <span className="text-[0.7rem] font-extrabold text-[#5c6f65]">المادة</span>
           <div className="relative">
             <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="input !w-auto appearance-none !pe-8 font-bold">
-              {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {linkedSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8a968d]" />
+          </div>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="text-[0.7rem] font-extrabold text-[#5c6f65]">الفصل الدراسي</span>
+          <div className="relative">
+            <select value={semester} onChange={(e) => setSemester(e.target.value)} className="input !w-auto appearance-none !pe-8 font-bold">
+              <option value="1">الفصل الأول</option>
+              <option value="2">الفصل الثاني</option>
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8a968d]" />
+          </div>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="text-[0.7rem] font-extrabold text-[#5c6f65]">الفترة</span>
+          <div className="relative">
+            <select value={period} onChange={(e) => setPeriod(e.target.value)} className="input !w-auto appearance-none !pe-8 font-bold">
+              <option value="1">الفترة الأولى</option>
+              <option value="2">الفترة الثانية</option>
             </select>
             <ChevronDown size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8a968d]" />
           </div>
@@ -306,6 +345,19 @@ export default function GradesPage() {
       <div className="card overflow-hidden">
         {loadingGrid ? (
           <div className="p-4">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="shimmer mb-2 h-9 rounded" />)}</div>
+        ) : notLinked ? (
+          <div className="p-12 text-center">
+            <AlertTriangle className="mx-auto text-amber-500" size={36} />
+            <p className="mt-2 font-bold text-[#5c6f65]">هذه المادة غير مرتبطة بهذا الصف</p>
+            <p className="mt-1 text-[0.72rem] text-[#8a968d]">اربط المادة بالصف من صفحة المواد والتوزيع لتظهر هنا</p>
+            <Link href="/subjects" className="btn btn-primary mt-3">ربط المواد بالصفوف</Link>
+          </div>
+        ) : linkedSubjects.length === 0 ? (
+          <div className="p-12 text-center">
+            <AlertTriangle className="mx-auto text-amber-500" size={36} />
+            <p className="mt-2 font-bold text-[#5c6f65]">لا توجد مواد مرتبطة بصف هذا الفصل</p>
+            <Link href="/subjects" className="btn btn-primary mt-3">ربط المواد بالصفوف</Link>
+          </div>
         ) : components.length === 0 ? (
           <div className="p-12 text-center">
             <AlertTriangle className="mx-auto text-amber-500" size={36} />
@@ -394,7 +446,7 @@ export default function GradesPage() {
               {filteredStudents.length > 0 && (
                 <tfoot>
                   <tr className="bg-[#eef1ec] text-[0.66rem] font-extrabold text-[#3c4f44]">
-                    <td className="sticky right-0 z-10 bg-[#eef1ec] px-3 py-2 text-[#0a4630]">متوسط الفصل</td>
+                    <td className="sticky right-0 z-10 bg-[#eef1ec] px-3 py-2 text-[#0a4630]">متوسط الكشف</td>
                     {columnAverages.map((avg, i) => <td key={i} className="border-l border-[#dfe2da] px-1 py-2 text-center tabular-nums">{avg.toFixed(1)}</td>)}
                     <td className="border-l border-[#dfe2da] px-2 py-2 text-center tabular-nums">{(filteredStudents.reduce((a, s) => a + (totals.get(s.id)?.total ?? 0), 0) / Math.max(1, stats.graded)).toFixed(1)}</td>
                     <td className="border-l border-[#dfe2da]"></td>

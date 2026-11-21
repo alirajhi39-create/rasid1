@@ -27,7 +27,10 @@ export async function GET() {
           'isActive', gc.is_active, 'sortOrder', gc.sort_order
         ) ORDER BY gc.sort_order ASC, gc.id ASC)
         FROM grade_components gc WHERE gc.subject_id = s.id
-      ), '[]'::json) AS components
+      ), '[]'::json) AS components,
+      COALESCE((
+        SELECT array_agg(l.grade_label) FROM subject_grade_links l WHERE l.subject_id = s.id
+      ), '{}'::text[]) AS grade_labels
     FROM subjects s
     WHERE s.teacher_id = ${session.sub}
     ORDER BY s.sort_order ASC, s.id ASC
@@ -58,6 +61,14 @@ export async function POST(req: Request) {
         VALUES (${subjectId}, ${c.name}, ${c.category}, ${c.maxScore}, ${c.weightLabel}, TRUE, ${c.sortOrder})
       `);
     }
+  }
+  // المادة الجديدة تظهر افتراضياً في كل صفوف المعلم (يمكن ضبط الربط لاحقاً)
+  if (subjectId) {
+    await db.execute(sql`
+      INSERT INTO subject_grade_links (subject_id, grade_label)
+      SELECT DISTINCT ${subjectId}, grade_label FROM classes WHERE teacher_id = ${session.sub}
+      ON CONFLICT (subject_id, grade_label) DO NOTHING
+    `);
   }
   return Response.json({ ok: true, id: subjectId }, { status: 201 });
 }

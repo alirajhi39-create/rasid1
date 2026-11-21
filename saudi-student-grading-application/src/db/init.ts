@@ -77,11 +77,20 @@ CREATE TABLE IF NOT EXISTS grades (
   id SERIAL PRIMARY KEY,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   component_id INTEGER NOT NULL REFERENCES grade_components(id) ON DELETE CASCADE,
+  semester SMALLINT NOT NULL DEFAULT 1,
+  period SMALLINT NOT NULL DEFAULT 1,
   value NUMERIC(6,2),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_student_component ON grades(student_id, component_id);
 CREATE INDEX IF NOT EXISTS idx_grades_component ON grades(component_id);
+
+CREATE TABLE IF NOT EXISTS subject_grade_links (
+  id SERIAL PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  grade_label TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
+CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
 `;
 
 // تهجير القواعد القائمة: إضافة teacher_id وربطها بأول حساب معلم (المالك الحالي للبيانات)
@@ -92,6 +101,25 @@ UPDATE classes SET teacher_id = (SELECT MIN(id) FROM teachers) WHERE teacher_id 
 UPDATE subjects SET teacher_id = (SELECT MIN(id) FROM teachers) WHERE teacher_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_subjects_teacher ON subjects(teacher_id);
+
+-- فصلان دراسيان وفترتان لكل فصل: إضافة أبعاد الفصل والفترة على الدرجات
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS semester SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS period SMALLINT NOT NULL DEFAULT 1;
+DROP INDEX IF EXISTS uq_grade_student_component;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_student_component_sem_per ON grades(student_id, component_id, semester, period);
+
+-- ربط المواد بالصفوف (الصفوف الحالية تُربط بكل موادها للحفاظ على الظهور السابق)
+CREATE TABLE IF NOT EXISTS subject_grade_links (
+  id SERIAL PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  grade_label TEXT NOT NULL
+);
+INSERT INTO subject_grade_links (subject_id, grade_label)
+SELECT DISTINCT s.id, c.grade_label
+FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
+ON CONFLICT DO NOTHING;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
+CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
 `;
 
 // توزيع الدرجات الافتراضي وفق لائحة تقويم الطالب (أعمال السنة 60 + النهائي 40)
@@ -265,34 +293,55 @@ export async function initializeDatabase(): Promise<InitReport> {
       studentIds.push({ id: inserted.rows[0]?.id, classIdx });
     }
     report.studentsSeeded = studentIds.length;
+  }
 
-    // 5) رصد درجات تجريبية واقعية (فقط إذا جدول الدرجات فارغ)
-    const gradeCount = await db.execute<{ c: string }>(sql`SELECT COUNT(*)::text AS c FROM grades`);
-    if (Number(gradeCount.rows[0]?.c ?? "0") === 0) {
-      const comps = await db.execute<{ id: number; max_score: string }>(sql`
-        SELECT gc.id, gc.max_score
-        FROM grade_components gc JOIN subjects s ON s.id = gc.subject_id
-        WHERE s.teacher_id = ${ownerId}
-      `);
-      let insertedGrades = 0;
-      for (const st of studentIds) {
-        const ability = 0.45 + rand() * 0.6;
-        for (const comp of comps.rows) {
-          if (rand() < 0.06) continue;
-          const max = Number(comp.max_score);
-          const noise = (rand() - 0.5) * 0.25;
-          let score = max * Math.min(1, Math.max(0.08, ability + noise));
-          score = Math.round(score * 2) / 2;
-          await db.execute(sql`
-            INSERT INTO grades (student_id, component_id, value)
-            VALUES (${st.id}, ${comp.id}, ${score})
-            ON CONFLICT (student_id, component_id) DO NOTHING
-          `);
-          insertedGrades++;
+  // 5) رصد درجات تجريبية واقعية للعام كاملاً (فقط إذا جدول الدرجات فارغ)
+  const gradeCount = await db.execute<{ c: string }>(sql`SELECT COUNT(*)::text AS c FROM grades`);
+  if (Number(gradeCount.rows[0]?.c ?? "0") === 0) {
+    const comps = await db.execute<{ id: number; max_score: string }>(sql`
+      SELECT gc.id, gc.max_score
+      FROM grade_components gc JOIN subjects s ON s.id = gc.subject_id
+      WHERE s.teacher_id = ${ownerId}
+    `);
+    const studentRows = await db.execute<{ id: number }>(sql`
+      SELECT s.id FROM students s JOIN classes c ON c.id = s.class_id
+      WHERE c.teacher_id = ${ownerId} ORDER BY s.id
+    `);
+    const rand = seededRandom(20250507);
+    let insertedGrades = 0;
+    for (const st of studentRows.rows) {
+      const ability = 0.45 + rand() * 0.6;
+      for (const comp of comps.rows) {
+        const max = Number(comp.max_score);
+        for (const semester of [1, 2]) {
+          for (const period of [1, 2]) {
+            if (rand() < 0.06) continue;
+            const noise = (rand() - 0.5) * 0.25;
+            const semesterShift = semester === 2 ? 0.03 : 0;
+            let score = max * Math.min(1, Math.max(0.08, ability + semesterShift + noise));
+            score = Math.round(score * 2) / 2;
+            await db.execute(sql`
+              INSERT INTO grades (student_id, component_id, semester, period, value)
+              VALUES (${st.id}, ${comp.id}, ${semester}, ${period}, ${score})
+              ON CONFLICT (student_id, component_id, semester, period) DO NOTHING
+            `);
+            insertedGrades++;
+          }
         }
       }
-      report.gradesSeeded = insertedGrades;
     }
+    report.gradesSeeded = insertedGrades;
+  }
+
+  // ربط المواد بجميع صفوف المالك (القواعد الجديدة بعد البذر؛ الأقدم مغطاة في MIGRATION)
+  if (ownerId) {
+    await db.execute(sql`
+      INSERT INTO subject_grade_links (subject_id, grade_label)
+      SELECT DISTINCT s.id, c.grade_label
+      FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
+      WHERE s.teacher_id = ${ownerId}
+      ON CONFLICT (subject_id, grade_label) DO NOTHING
+    `);
   }
 
   return report;

@@ -187,7 +187,6 @@ export default function RegisterPage() {
                     <select id="sm" className={inputCls} value={form.semester} onChange={set("semester")}>
                       <option>الفصل الدراسي الأول</option>
                       <option>الفصل الدراسي الثاني</option>
-                      <option>الفصل الدراسي الثالث</option>
                     </select>
                   </div>
                   <div className="sm:col-span-2">

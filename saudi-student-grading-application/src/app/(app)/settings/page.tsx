@@ -127,7 +127,6 @@ export default function SettingsPage() {
             <select id="sm" className="input font-bold" value={form.semester} onChange={set("semester")}>
               <option>الفصل الدراسي الأول</option>
               <option>الفصل الدراسي الثاني</option>
-              <option>الفصل الدراسي الثالث</option>
             </select>
           </div>
         </div>
