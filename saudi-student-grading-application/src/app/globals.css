@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+:root {
+  --green-900: #083d28;
+  --green-800: #0a4630;
+  --green-700: #0e5c3a;
+  --green-600: #14704a;
+  --green-500: #1d8a5c;
+  --gold: #c9a24b;
+  --gold-soft: #e7cf9a;
+  --paper: #fbfbf8;
+  --ink: #16241d;
+  --muted: #5c6f65;
+}
+
+html, body {
+  font-family: "Cairo", "Tajawal", system-ui, -apple-system, sans-serif;
+  background: #f4f5f0;
+  color: var(--ink);
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+::selection { background: #c9a24b66; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #b9c4bb; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #8fa496; }
+
+/* ============ مكوّنات الواجهة ============ */
+
+.card {
+  background: #fff;
+  border: 1px solid #e6e7e0;
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 2px rgba(22, 36, 29, 0.05), 0 12px 32px -12px rgba(22, 36, 29, 0.12);
+}
+
+.input {
+  width: 100%;
+  background: #fff;
+  border: 1.5px solid #dfe2da;
+  border-radius: 0.8rem;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--green-600);
+  box-shadow: 0 0 0 3px rgba(20, 112, 74, 0.15);
+}
+.input::placeholder { color: #a3ada5; }
+
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.8rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.55rem 1.1rem;
+  transition: transform .12s, box-shadow .15s, background .15s, opacity .15s;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-primary {
+  background: linear-gradient(160deg, var(--green-600), var(--green-800));
+  color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(10, 70, 48, .55), inset 0 1px 0 rgba(255,255,255,.25);
+}
+.btn-primary:hover { box-shadow: 0 8px 22px -6px rgba(10,70,48,.6), inset 0 1px 0 rgba(255,255,255,.25); }
+
+.btn-gold {
+  background: linear-gradient(160deg, #e3c878, var(--gold));
+  color: #3d2e07;
+  box-shadow: 0 6px 18px -6px rgba(160, 124, 30, .6), inset 0 1px 0 rgba(255,255,255,.5);
+}
+
+.btn-ghost {
+  background: #eef1ec;
+  color: var(--green-800);
+}
+.btn-ghost:hover { background: #e2e7e0; }
+
+.btn-danger { background: #fee2e2; color: #b91c1c; }
+.btn-danger:hover { background: #fecaca; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .72rem; font-weight: 800;
+  border-radius: 999px; padding: .2rem .7rem;
+  white-space: nowrap;
+}
+
+/* جدول الرصد */
+.grade-grid th, .grade-grid td { border: 1px solid #e3e6dd; }
+.grade-input {
+  width: 100%; min-width: 3.6rem; text-align: center;
+  background: transparent; border: none; font-family: inherit;
+  font-size: .85rem; font-weight: 700; padding: .35rem .1rem; color: var(--ink);
+}
+.grade-input:focus { outline: 2px solid var(--green-600); outline-offset: -2px; background: #f0fdf6; border-radius: 2px; }
+.grade-cell { transition: background .2s; }
+.grade-cell.overmax { background: #fef2f2 !important; }
+.grade-cell.overmax .grade-input { color: #b91c1c; }
+.grade-cell.modified { background: #fffbeb; }
+
+/* ============ ورق الطباعة الرسمي ============ */
+.print-sheet {
+  background: #fff;
+  color: #111;
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
+  border: 1px solid #d8d8d0;
+  box-shadow: 0 20px 50px -20px rgba(0,0,0,.35);
+  padding: 1.4rem 1.6rem;
+}
+.ministry-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.ministry-head .col { text-align: center; line-height: 1.55; }
+.ministry-head h1 { font-size: 1.05rem; font-weight: 900; }
+.ministry-head p, .ministry-head small { font-size: .72rem; color: #222; }
+.doc-title {
+  text-align: center; font-weight: 900; font-size: 1.05rem;
+  border-top: 2.5px solid var(--green-800); border-bottom: 2.5px solid var(--green-800);
+  padding: .3rem 0; margin: .6rem 0 .7rem; color: var(--green-900); letter-spacing: .02em;
+}
+.sheet-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+.sheet-table th, .sheet-table td { border: 1px solid #33413a; padding: .28rem .3rem; text-align: center; }
+.sheet-table thead th { background: #eef3ee; font-weight: 800; }
+.sign-row { display: flex; justify-content: space-between; gap: 2rem; margin-top: 1.1rem; font-size: .78rem; }
+.sign-box { text-align: center; min-width: 180px; }
+.sign-line { border-bottom: 1.5px solid #111; height: 2.2rem; margin-bottom: .2rem; }
+
+.page-break { break-after: page; page-break-after: always; }
+
+/* ============ الطباعة ============ */
+@media print {
+  @page { size: A4; margin: 8mm; }
+  html, body { background: #fff !important; }
+  .app-chrome, .no-print { display: none !important; }
+  .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .print-sheet {
+    border: none !important; box-shadow: none !important; max-width: none !important;
+    padding: 0 !important; margin: 0 !important; break-inside: auto;
+  }
+  .print-sheet.page-break { break-after: page; page-break-after: always; }
+  .sheet-table { font-size: .6rem; }
+  .sheet-table th, .sheet-table td { padding: .18rem .2rem; }
+  .print-sheet { padding: 0 !important; }
+  tr { break-inside: avoid; }
+}
+
+/* حركات لطيفة */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) both; }
+
+@keyframes pulseDot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.save-dot { animation: pulseDot 1.1s infinite; }
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.shimmer {
+  background: linear-gradient(110deg, #eef1ec 8%, #f7f8f5 30%, #eef1ec 55%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
