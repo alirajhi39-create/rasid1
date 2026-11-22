@@ -154,15 +154,15 @@ html, body {
 .page-break { break-after: page; page-break-after: always; }
 
 /* ============ الطباعة — أفقي افتراضياً مع إمكانية التبديل للعمودي ============ */
-@page landscape-page { size: A4 landscape; margin: 7mm 9mm; }
-@page portrait-page { size: A4 portrait; margin: 9mm 11mm; }
-@page { size: A4 landscape; margin: 7mm 9mm; }
+@page landscape-page { size: A4 landscape; margin: 10mm 14mm; }
+@page portrait-page { size: A4 portrait; margin: 12mm 16mm; }
+@page { size: A4 landscape; margin: 10mm 14mm; }
 
 .print-sheet { page: landscape-page; }
 .print-sheet.portrait { page: portrait-page; }
 
 @media print {
-  html, body { background: #fff !important; }
+  html, body { background: #fff !important; width: auto !important; overflow: visible !important; }
   .app-chrome, .no-print { display: none !important; }
   .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .print-sheet {
@@ -174,14 +174,14 @@ html, body {
   .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
 
-  /* ضغط الترويسة لتوفير مساحة رأس الصفحة */
+  /* ضغط الترويسة لتوفير مساحة رأس الصفحة + منع أي عنصر من تجاوز عرض الورقة */
   .ministry-head { gap: .6rem; line-height: 1.25; }
-  .ministry-head .col { line-height: 1.3; }
+  .ministry-head .col { line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
   .ministry-head img { width: 92px !important; height: 47px !important; }
   .ministry-head strong, .ministry-head span { font-size: .66rem !important; }
 
   /* عنوان الوثيقة مضغوط */
-  .doc-title { font-size: .9rem; padding: .18rem 0; margin: .3rem 0 .4rem; }
+  .doc-title { font-size: .9rem; padding: .18rem 0; margin: .3rem 0 .4rem; overflow-wrap: anywhere; }
 
   /* الجدول مضغوط: أكثر صفوف في الصفحة دون أي اقتطاع */
   .sheet-table { font-size: .55rem; width: 100% !important; max-width: 100% !important; table-layout: fixed; border-collapse: collapse; }

@@ -23,6 +23,18 @@ export async function POST(req: Request) {
     if (!teacher || !valid) {
       return NextResponse.json({ ok: false, error: "بيانات الدخول غير صحيحة" }, { status: 401 });
     }
+    // إصلاح ذاتي: إذا فقدت المساحة موادها (فشل تبذير سابق) تُستعاد المواد الافتراضية
+    try {
+      const sc = await db.execute<{ c: string }>(
+        sql`SELECT COUNT(*)::text AS c FROM subjects WHERE teacher_id = ${teacher.id}`
+      );
+      if (Number(sc.rows[0]?.c ?? "0") === 0) {
+        const { seedDefaultSubjectsForTeacher } = await import("@/db/init");
+        await seedDefaultSubjectsForTeacher(teacher.id);
+      }
+    } catch (healErr) {
+      console.error("login: workspace self-heal failed", healErr);
+    }
     const token = createSessionToken({ sub: teacher.id, name: teacher.full_name, username: teacher.username });
     const res = NextResponse.json({ ok: true, name: teacher.full_name });
     res.cookies.set(sessionCookie.name, token, {

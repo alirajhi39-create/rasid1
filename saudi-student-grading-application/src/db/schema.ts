@@ -6,6 +6,7 @@ import {
   boolean,
   numeric,
   timestamp,
+  jsonb,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -135,6 +136,20 @@ export const subjectGradeLinks = pgTable(
     uniqueIndex("uq_subject_grade_link").on(t.subjectId, t.gradeLabel),
     index("idx_subject_grade_link_label").on(t.gradeLabel),
   ]
+);
+
+// النسخ الاحتياطية التلقائية لمساحات عمل المعلمين
+export const backups = pgTable(
+  "backups",
+  {
+    id: serial("id").primaryKey(),
+    teacherId: integer("teacher_id")
+      .notNull()
+      .references(() => teachers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    payload: jsonb("payload").notNull(),
+  },
+  (t) => [index("idx_backups_teacher").on(t.teacherId)]
 );
 
 // الربط المباشر لكل فصل — المادة تظهر فقط في الفصول المرتبطة بها

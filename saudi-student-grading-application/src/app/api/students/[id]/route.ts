@@ -65,5 +65,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return Response.json({ ok: false, error: "الطالب غير موجود" }, { status: 404 });
   }
   await db.execute(sql`DELETE FROM students WHERE id = ${studentId}`);
+  void import("@/lib/backup").then((m) => m.saveAutoSnapshot(session.sub)).catch(() => {});
   return Response.json({ ok: true });
 }

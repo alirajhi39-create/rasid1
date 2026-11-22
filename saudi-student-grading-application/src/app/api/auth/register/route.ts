@@ -59,8 +59,13 @@ export async function POST(req: Request) {
     const teacherId = inserted.rows[0]?.id;
     if (!teacherId) throw new Error("تعذر إنشاء الحساب");
 
-    // مساحة عمل جديدة تبدأ بمواد افتراضية بتوزيع لائحي (بدون بيانات طلاب)
-    await seedDefaultSubjectsForTeacher(teacherId);
+    // مساحة عمل جديدة تبدأ بمواد افتراضية — أي خطأ هنا لا يُلغي إنشاء الحساب
+    // (يُصلح تلقائياً عند أول تسجيل دخول من مسار login)
+    try {
+      await seedDefaultSubjectsForTeacher(teacherId);
+    } catch (seedErr) {
+      console.error("register: subject seeding failed (account still created)", seedErr);
+    }
 
     const token = createSessionToken({ sub: teacherId, name: fullName, username });
     const res = NextResponse.json({ ok: true, name: fullName });

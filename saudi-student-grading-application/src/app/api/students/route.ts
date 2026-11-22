@@ -57,5 +57,6 @@ export async function POST(req: Request) {
     VALUES (${fullName}, ${nationalId}, ${guardianPhone}, ${gender}, ${classId})
     RETURNING id, full_name, national_id, class_id
   `);
+  void import("@/lib/backup").then((m) => m.saveAutoSnapshot(session.sub)).catch(() => {});
   return Response.json({ ok: true, student: inserted.rows[0] }, { status: 201 });
 }

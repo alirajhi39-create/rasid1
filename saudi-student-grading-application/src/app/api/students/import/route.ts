@@ -59,5 +59,8 @@ export async function POST(req: Request) {
     inserted++;
   }
 
+  if (inserted > 0) {
+    void import("@/lib/backup").then((m) => m.saveAutoSnapshot(session.sub)).catch(() => {});
+  }
   return Response.json({ ok: true, inserted, skipped });
 }

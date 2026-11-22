@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Settings, School, Save, KeyRound, Database, Loader2, CheckCircle2, ShieldCheck,
-  Eye, EyeOff, Server, Info, RefreshCw,
+  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -28,6 +28,8 @@ export default function SettingsPage() {
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
   const [initBusy, setInitBusy] = useState(false);
   const [initReport, setInitReport] = useState<string>("");
+  const [backupStatus, setBackupStatus] = useState<{ last: string | null; count: number } | null>(null);
+  const [busyBackup, setBusyBackup] = useState<"" | "export" | "auto" | "restore">("");
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => {
@@ -88,6 +90,73 @@ export default function SettingsPage() {
     }
     setInitBusy(false);
   };
+
+  // ===== النسخ الاحتياطي =====
+  const loadBackupStatus = () =>
+    fetch("/api/backup/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => d.ok && setBackupStatus({ last: d.last, count: d.count }))
+      .catch(() => {});
+
+  useEffect(() => { loadBackupStatus(); }, []);
+
+  const downloadJson = (text: string, name: string) => {
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportBackup = async () => {
+    setBusyBackup("export");
+    try {
+      const r = await fetch("/api/backup", { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error ?? "تعذر التصدير", "error"); return; }
+      downloadJson(JSON.stringify(d, null, 2), `rased-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      toast("تم تنزيل النسخة الاحتياطية");
+    } catch { toast("تعذر التصدير", "error"); }
+    setBusyBackup("");
+  };
+
+  const downloadAutoBackup = async () => {
+    setBusyBackup("auto");
+    try {
+      const r = await fetch("/api/backup/auto", { cache: "no-store" });
+      if (!r.ok) { toast("لا توجد نسخة تلقائية محفوظة بعد", "error"); return; }
+      const d = await r.json();
+      const at = r.headers.get("X-Backup-At")?.slice(0, 16).replace("T", "-").replace(":", "-") ?? "latest";
+      downloadJson(JSON.stringify(d, null, 2), `rased-autobackup-${at}.json`);
+      toast("تم تنزيل آخر نسخة تلقائية");
+    } catch { toast("تعذر التنزيل", "error"); }
+    setBusyBackup("");
+  };
+
+  const restoreBackup = async (file: File) => {
+    const ok = window.confirm(
+      "استعادة نسخة احتياطية ستستبدل كل بياناتك الحالية (الفصول، الطلاب، المواد، الدرجات). هل أنت متأكد؟"
+    );
+    if (!ok) return;
+    setBusyBackup("restore");
+    try {
+      const text = await file.text();
+      const r = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: text,
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error ?? "فشلت الاستعادة", "error"); return; }
+      toast(`تمت الاستعادة: ${d.classes} فصل · ${d.students} طالب · ${d.subjects} مادة · ${d.grades} درجة`);
+      loadBackupStatus();
+    } catch { toast("تعذرت الاستعادة", "error"); }
+    setBusyBackup("");
+  };
+
+  const backupDate = backupStatus?.last
+    ? new Intl.DateTimeFormat("ar", { dateStyle: "medium", timeStyle: "short" }).format(new Date(backupStatus.last))
+    : null;
 
   const field = (id: string, label: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, dir?: string) => (
     <div>
@@ -210,6 +279,47 @@ export default function SettingsPage() {
             <li className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600" /> CREATE TABLE IF NOT EXISTS — لا يمس البيانات القائمة</li>
             <li className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-emerald-600" /> البيانات التجريبية تُزرع فقط عند قاعدة فارغة تماماً</li>
           </ul>
+        </div>
+
+        {/* ===== النسخ الاحتياطي ===== */}
+        <div className="card p-5">
+          <h2 className="flex items-center gap-2 text-lg font-black text-[#0a4630]"><Archive className="text-[#c9a24b]" /> النسخ الاحتياطي</h2>
+          <p className="mt-1 text-[0.7rem] leading-relaxed text-[#5c6f65]">
+            صدّر أسماء الطلاب ودرجاتهم وكل مساحتك في ملف واحد، أو احفظ نسخة تلقائية يُحدَّث عند كل تعديل.
+          </p>
+
+          <div className="mt-3 rounded-2xl border border-[#e6e7e0] bg-[#fbfbf8] p-3">
+            <div className="flex items-center justify-between text-[0.68rem] font-bold">
+              <span className="text-[#5c6f65]">آخر نسخة تلقائية محفوظة</span>
+              <span className={backupStatus?.last ? "text-emerald-700" : "text-[#a3ada5]"}>
+                {backupDate ?? "لا توجد بعد"}
+              </span>
+            </div>
+            {backupStatus?.last && (
+              <div className="mt-1 text-[0.62rem] font-semibold text-[#8a968d]">{backupStatus.count} نسخ محفوظة (الأحدث 5)</div>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button onClick={exportBackup} disabled={busyBackup !== ""} className="btn btn-primary justify-center">
+              {busyBackup === "export" ? <Loader2 size={17} className="animate-spin" /> : <Download size={17} />}
+              تنزيل نسخة احتياطية
+            </button>
+            <button onClick={downloadAutoBackup} disabled={busyBackup !== ""} className="btn btn-ghost justify-center">
+              {busyBackup === "auto" ? <Loader2 size={17} className="animate-spin" /> : <Clock size={17} />}
+              تنزيل آخر نسخة تلقائية
+            </button>
+          </div>
+
+          <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#cfd4cb] bg-[#fbfbf8] px-4 py-3 text-[0.78rem] font-extrabold text-[#22332a] transition hover:border-[#0e5c3a] hover:bg-emerald-50/40">
+            {busyBackup === "restore" ? <Loader2 size={17} className="animate-spin" /> : <Upload size={17} />}
+            استعادة من ملف نسخة احتياطية
+            <input type="file" accept="application/json,.json" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) restoreBackup(f); e.target.value = ""; }} />
+          </label>
+          <p className="mt-2 flex items-center gap-1 text-[0.6rem] font-semibold text-amber-800">
+            <Info size={11} /> الاستعادة تستبدل كل بيانات مساحتك الحالية بمحتوى الملف — نزّل نسخة جديدة قبل أي استعادة.
+          </p>
         </div>
       </div>
     </div>

@@ -143,5 +143,11 @@ export async function PUT(req: Request) {
     }
     saved++;
   }
+
+  // نسخة احتياطية تلقائية (خفيفة: تُهمل إذا كانت آخر نسخة أحدث من 10 دقائق)
+  if (saved > 0) {
+    void import("@/lib/backup").then((m) => m.saveAutoSnapshot(session.sub)).catch(() => {});
+  }
+
   return Response.json({ ok: true, saved, at: new Date().toISOString() });
 }

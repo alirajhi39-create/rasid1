@@ -126,6 +126,15 @@ CREATE TABLE IF NOT EXISTS subject_class_links (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_class_link ON subject_class_links(subject_id, class_id);
 CREATE INDEX IF NOT EXISTS idx_subject_class_link_class ON subject_class_links(class_id);
 
+-- النسخ الاحتياطية التلقائية (لقطات JSONB لمساحة عمل كل معلم — آخر 5)
+CREATE TABLE IF NOT EXISTS backups (
+  id SERIAL PRIMARY KEY,
+  teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_backups_teacher ON backups(teacher_id);
+
 -- النموذج الجديد: المهام الأدائية 40 + التقويمات التحريرية 60 (آمن للتكرار)
 -- 1) الأعمدة الأدائية أولاً: المهام الأدائية والمشاركة
 UPDATE grade_components SET category='performance' WHERE category='formative' AND (name ILIKE '%أدائ%' OR name ILIKE '%مشاركة%' OR name ILIKE '%تفاعل%');
