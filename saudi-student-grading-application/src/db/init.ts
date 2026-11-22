@@ -108,7 +108,7 @@ ALTER TABLE grades ADD COLUMN IF NOT EXISTS period SMALLINT NOT NULL DEFAULT 1;
 DROP INDEX IF EXISTS uq_grade_student_component;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_student_component_sem_per ON grades(student_id, component_id, semester, period);
 
--- جدول الربط (إنشاء فقط — لا يعيد إدراج أي صفوف!)
+-- جدول الربط القديم (نحتفظ به للرجوع، ولا يُستخدم)
 CREATE TABLE IF NOT EXISTS subject_grade_links (
   id SERIAL PRIMARY KEY,
   subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -116,6 +116,15 @@ CREATE TABLE IF NOT EXISTS subject_grade_links (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
 CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
+
+-- الربط المباشر لكل فصل: المادة تظهر فقط في الفصول المرتبطة بها (بدون غموض أسامي الصفوف)
+CREATE TABLE IF NOT EXISTS subject_class_links (
+  id SERIAL PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_class_link ON subject_class_links(subject_id, class_id);
+CREATE INDEX IF NOT EXISTS idx_subject_class_link_class ON subject_class_links(class_id);
 
 -- النموذج الجديد: المهام الأدائية 40 + التقويمات التحريرية 60 (آمن للتكرار)
 -- 1) الأعمدة الأدائية أولاً: المهام الأدائية والمشاركة
@@ -261,6 +270,12 @@ export async function initializeDatabase(): Promise<InitReport> {
   `);
   // يُنفذ Backfill مرة واحدة في العمر — والأفضل تنفيذه في النهاية بعد التبذير
   const linksBackfillPending = mark.rows.length > 0;
+  // v2: تحويل الربط من أسماء الصفوف النصية إلى الربط المباشر بالفصول (مرة واحدة)
+  const mark2 = await db.execute<{ key: string }>(sql`
+    INSERT INTO rased_meta (key) VALUES ('subject_class_links_backfill_v2')
+    ON CONFLICT (key) DO NOTHING RETURNING key
+  `);
+  const classLinksBackfillPending = mark2.rows.length > 0;
   report.tablesCreated = true;
 
   // 2) حساب أول معلم (يُنشأ فقط إذا لم توجد أي حسابات — الحساب المالك للبيانات الحالية)
@@ -363,9 +378,30 @@ export async function initializeDatabase(): Promise<InitReport> {
     await db.execute(sql.raw(BACKFILL_LINKS));
   }
 
+  // v2: الربط المباشر بالفصول — يُحوّل الروابط النصية (grade_label) إلى روابط (subject_id, class_id)
+  if (classLinksBackfillPending) {
+    await db.execute(sql`
+      INSERT INTO subject_class_links (subject_id, class_id)
+      SELECT s.id, c.id
+      FROM subjects s
+      JOIN classes c ON c.teacher_id = s.teacher_id
+      JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = c.grade_label
+      ON CONFLICT (subject_id, class_id) DO NOTHING
+    `);
+    // لا توجد أي روابط نصية: نربط كل المواد بكل فصول معلمها (حالة القاعدة الفارغة)
+    const anyOld = await db.execute<{ c: string }>(sql`SELECT COUNT(*)::text AS c FROM subject_grade_links`);
+    if (Number(anyOld.rows[0]?.c ?? "0") === 0) {
+      await db.execute(sql`
+        INSERT INTO subject_class_links (subject_id, class_id)
+        SELECT s.id, c.id FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
+        ON CONFLICT (subject_id, class_id) DO NOTHING
+      `);
+    }
+  }
+
   // ملاحظة: لا يوجد أي ربط تلقائي ضمني بعد هذه النقطة — الروابط تنشأ فقط عبر:
   // 1) Backfill الأحادي أعلاه (مرة واحدة في العمر — لا يمس ما يفكّه المعلم لاحقاً)
-  // 2) إنشاء مادة جديدة (تُربط بكل الصفوف — والمعلم يفك ما يشاء ويبقى مفكوكاً)
+  // 2) إنشاء مادة جديدة (تُربط بكل الفصول — والمعلم يفك ما يشاء ويبقى مفكوكاً)
   return report;
 }
 

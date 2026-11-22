@@ -154,9 +154,9 @@ html, body {
 .page-break { break-after: page; page-break-after: always; }
 
 /* ============ الطباعة — أفقي افتراضياً مع إمكانية التبديل للعمودي ============ */
-@page landscape-page { size: A4 landscape; margin: 9mm 11mm; }
-@page portrait-page { size: A4 portrait; margin: 12mm 15mm; }
-@page { size: A4 landscape; margin: 9mm 11mm; }
+@page landscape-page { size: A4 landscape; margin: 7mm 9mm; }
+@page portrait-page { size: A4 portrait; margin: 9mm 11mm; }
+@page { size: A4 landscape; margin: 7mm 9mm; }
 
 .print-sheet { page: landscape-page; }
 .print-sheet.portrait { page: portrait-page; }
@@ -168,22 +168,35 @@ html, body {
   .print-sheet {
     border: none !important; box-shadow: none !important;
     padding: 0 !important; margin: 0 auto !important; break-inside: auto;
-    width: 100% !important; max-width: 100% !important; overflow: hidden;
+    width: 100% !important; max-width: 100% !important; overflow: visible;
     page: landscape-page;
   }
   .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
 
-  /* محاذاة دقيقة: الجدول يملأ عرض الصفحة دون أي تجاوز أو اقتطاع */
-  .sheet-table { font-size: .62rem; width: 100% !important; max-width: 100% !important; table-layout: fixed; }
-  .sheet-table th, .sheet-table td { padding: .2rem .3rem; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+  /* ضغط الترويسة لتوفير مساحة رأس الصفحة */
+  .ministry-head { gap: .6rem; line-height: 1.25; }
+  .ministry-head .col { line-height: 1.3; }
+  .ministry-head img { width: 92px !important; height: 47px !important; }
+  .ministry-head strong, .ministry-head span { font-size: .66rem !important; }
+
+  /* عنوان الوثيقة مضغوط */
+  .doc-title { font-size: .9rem; padding: .18rem 0; margin: .3rem 0 .4rem; }
+
+  /* الجدول مضغوط: أكثر صفوف في الصفحة دون أي اقتطاع */
+  .sheet-table { font-size: .55rem; width: 100% !important; max-width: 100% !important; table-layout: fixed; border-collapse: collapse; }
+  .sheet-table th, .sheet-table td { padding: .1rem .22rem; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+  .sheet-table thead th { padding: .16rem .22rem; }
   .sheet-table .nid { direction: ltr; font-variant-numeric: tabular-nums; word-break: break-all; text-align: center; }
 
-  .ministry-head h1 { font-size: .98rem; }
-  .doc-title { font-size: .95rem; padding: .22rem 0; margin: .4rem 0 .5rem; }
-  .sign-row { margin-top: .6rem; font-size: .68rem; }
-  .sign-line { height: 1.6rem; }
+  /* صف التوقيع مضغوط ويتبقى مع تذييل الجدول */
+  .sign-row { margin-top: .5rem; font-size: .66rem; }
+  .sign-line { height: 1.3rem; }
+  .print-sheet p { font-size: .58rem !important; margin-top: .3rem !important; }
+
   tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
 }
 
 /* حركات لطيفة */

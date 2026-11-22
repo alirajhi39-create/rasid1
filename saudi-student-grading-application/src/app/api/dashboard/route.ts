@@ -28,7 +28,7 @@ export async function GET() {
         LEFT JOIN grade_components gc ON gc.subject_id = s.id AND gc.is_active = TRUE
         LEFT JOIN grades g ON g.component_id = gc.id AND g.value IS NOT NULL
         WHERE s.is_active = TRUE AND s.teacher_id = ${T}
-          AND EXISTS (SELECT 1 FROM subject_grade_links l WHERE l.subject_id = s.id)
+          AND EXISTS (SELECT 1 FROM subject_class_links l WHERE l.subject_id = s.id)
         GROUP BY s.id, s.name, s.color
         ORDER BY s.sort_order ASC
       `),
@@ -41,7 +41,7 @@ export async function GET() {
           FROM students st
           JOIN classes cl ON cl.id = st.class_id AND cl.teacher_id = ${T}
           CROSS JOIN subjects s
-          JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = cl.grade_label
+          JOIN subject_class_links l ON l.subject_id = s.id AND l.class_id = st.class_id
           JOIN grade_components gc ON gc.subject_id = s.id AND gc.is_active = TRUE
           LEFT JOIN grades g ON g.component_id = gc.id AND g.student_id = st.id AND g.value IS NOT NULL
           WHERE s.teacher_id = ${T}
@@ -67,7 +67,7 @@ export async function GET() {
           JOIN grades g ON g.student_id = st.id AND g.value IS NOT NULL
           JOIN grade_components gc ON gc.id = g.component_id AND gc.is_active = TRUE
           JOIN subjects s ON s.id = gc.subject_id AND s.teacher_id = ${T}
-          JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = c.grade_label
+          JOIN subject_class_links l ON l.subject_id = s.id AND l.class_id = c.id
           GROUP BY st.id, st.full_name, c.name, c.grade_label
           HAVING COUNT(g.id) >= 5
         )
@@ -82,7 +82,7 @@ export async function GET() {
           JOIN grades g ON g.student_id = st.id AND g.value IS NOT NULL
           JOIN grade_components gc ON gc.id = g.component_id AND gc.is_active = TRUE
           JOIN subjects s ON s.id = gc.subject_id AND s.teacher_id = ${T}
-          JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = c.grade_label
+          JOIN subject_class_links l ON l.subject_id = s.id AND l.class_id = c.id
           GROUP BY st.id, st.full_name, c.name, c.grade_label
           HAVING COUNT(g.id) >= 5
         )
@@ -100,15 +100,15 @@ export async function GET() {
              JOIN classes c ON c.id = st.class_id
              JOIN grade_components gc ON gc.id = g.component_id
              JOIN subjects s ON s.id = gc.subject_id
-             JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = c.grade_label
+             JOIN subject_class_links l ON l.subject_id = s.id AND l.class_id = c.id
             WHERE c.teacher_id = ${T} AND s.teacher_id = ${T} AND g.value IS NOT NULL) AS filled,
           (SELECT COALESCE(SUM(student_count * comp_count * 4), 0)::int FROM (
-             SELECT c.grade_label,
-                    (SELECT COUNT(*) FROM students st JOIN classes cc ON cc.id = st.class_id WHERE cc.teacher_id = ${T} AND cc.grade_label = c.grade_label) AS student_count,
+             SELECT c.id AS class_id,
+                    (SELECT COUNT(*) FROM students st WHERE st.class_id = c.id) AS student_count,
                     (SELECT COUNT(*) FROM grade_components gc JOIN subjects s ON s.id = gc.subject_id
-                       JOIN subject_grade_links l ON l.subject_id = s.id AND l.grade_label = c.grade_label
+                       JOIN subject_class_links l ON l.subject_id = s.id AND l.class_id = c.id
                       WHERE s.teacher_id = ${T} AND gc.is_active = TRUE AND s.is_active = TRUE) AS comp_count
-             FROM (SELECT DISTINCT grade_label FROM classes WHERE teacher_id = ${T}) c
+             FROM classes c WHERE c.teacher_id = ${T}
            ) t) AS expected
       `),
     ]);

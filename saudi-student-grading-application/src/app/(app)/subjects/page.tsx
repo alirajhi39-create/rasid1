@@ -13,7 +13,7 @@ type Component = {
 };
 type Subject = {
   id: number; name: string; max_total: string | number; pass_score: string | number;
-  color: string; is_active: boolean; components: Component[]; grade_labels?: string[];
+  color: string; is_active: boolean; components: Component[]; class_ids?: number[];
 };
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 
@@ -96,7 +96,7 @@ export default function SubjectsPage() {
       const list: Subject[] = d.subjects.map((s: Subject) => ({
         ...s,
         components: (s.components ?? []).map((c) => ({ ...c, maxScore: Number(c.maxScore), isActive: Boolean(c.isActive) })),
-        grade_labels: s.grade_labels ?? [],
+        class_ids: (s.class_ids ?? []).map(Number),
       }));
       setSubjects(list);
       if (list.length && (selectedId === null || !list.find((s) => s.id === selectedId))) {
@@ -107,19 +107,16 @@ export default function SubjectsPage() {
   };
   useEffect(() => { load(); loadClasses(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
-  const allGradeLabels = useMemo(
-    () => [...new Set(classMeta.map((c) => c.grade_label))],
-    [classMeta]
-  );
+  const allClassIds = useMemo(() => classMeta.map((c) => c.id), [classMeta]);
 
-  const setLinks = async (subject: Subject, gradeLabels: string[]) => {
+  const setLinks = async (subject: Subject, classIds: number[]) => {
     setSavingLinks(true);
     // تحديث تفاؤلي
-    setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, grade_labels: gradeLabels } : s)));
+    setSubjects((prev) => prev.map((s) => (s.id === subject.id ? { ...s, class_ids: classIds } : s)));
     const r = await fetch(`/api/subjects/${subject.id}/links`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gradeLabels }),
+      body: JSON.stringify({ classIds }),
     });
     const d = await r.json();
     setSavingLinks(false);
@@ -129,9 +126,9 @@ export default function SubjectsPage() {
     }
   };
 
-  const toggleLink = (subject: Subject, label: string) => {
-    const current = new Set(subject.grade_labels ?? []);
-    if (current.has(label)) current.delete(label); else current.add(label);
+  const toggleLink = (subject: Subject, classId: number) => {
+    const current = new Set(subject.class_ids ?? []);
+    if (current.has(classId)) current.delete(classId); else current.add(classId);
     setLinks(subject, [...current]);
   };
 
@@ -249,8 +246,8 @@ export default function SubjectsPage() {
                       {activeCount} خانة مفعّلة · العظمى {Number(s.max_total)}
                       {!s.is_active && " · موقوفة"}
                     </span>
-                    <span className={`mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.58rem] font-bold ${(s.grade_labels?.length ?? 0) === 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-300" : "bg-emerald-50 text-emerald-800"}`}>
-                      {(s.grade_labels?.length ?? 0) === 0 ? "غير مرتبطة بأي صف!" : `تظهر في ${s.grade_labels!.length} صف/مرحلة`}
+                    <span className={`mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.58rem] font-bold ${(s.class_ids?.length ?? 0) === 0 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-300" : "bg-emerald-50 text-emerald-800"}`}>
+                      {(s.class_ids?.length ?? 0) === 0 ? "غير مرتبطة بأي فصل!" : `تظهر في ${s.class_ids!.length} فصل`}
                     </span>
                   </span>
                   {active && <span className="h-2.5 w-2.5 rounded-full bg-[#0e5c3a]" />}
@@ -307,43 +304,44 @@ export default function SubjectsPage() {
               </div>
             </div>
 
-            {/* ربط المادة بالصفوف — تظهر فقط في الصفوف المحددة */}
+            {/* ربط المادة بالفصول — تظهر فقط في الفصول المحددة */}
             <div className="border-b border-[#eef0ea] bg-white px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span className="flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]">
-                    <GraduationCap size={14} className="text-[#c9a24b]" /> الصفوف التي تظهر فيها المادة
+                    <GraduationCap size={14} className="text-[#c9a24b]" /> الفصول التي تظهر فيها المادة
                     {savingLinks && <Loader2 size={12} className="animate-spin text-[#5c6f65]" />}
                   </span>
-                  <span className="mt-0.5 block text-[0.58rem] font-semibold text-[#8a968d]">فعّل الصفوف المطلوبة — المادة لن تظهر في غيرها (الرصد والتقارير والتصدير)</span>
+                  <span className="mt-0.5 block text-[0.58rem] font-semibold text-[#8a968d]">فعّل الفصول المطلوبة — المادة لن تظهر في غيرها (الرصد والتقارير والتصدير)</span>
                 </div>
                 <div className="flex gap-1.5">
-                  <button className="btn btn-ghost !px-2.5 !py-1 text-[0.62rem]" onClick={() => setLinks(selected, [...allGradeLabels])}>ربط الكل</button>
+                  <button className="btn btn-ghost !px-2.5 !py-1 text-[0.62rem]" onClick={() => setLinks(selected, [...allClassIds])}>ربط الكل</button>
                   <button className="btn btn-ghost !px-2.5 !py-1 text-[0.62rem]" onClick={() => setLinks(selected, [])}>إلغاء الكل</button>
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {allGradeLabels.length === 0 && (
+                {classMeta.length === 0 && (
                   <span className="text-[0.68rem] font-bold text-[#8a968d]">لا توجد فصول بعد — أضف فصلاً من صفحة الفصول ليظهر هنا</span>
                 )}
-                {allGradeLabels.map((label) => {
-                  const linked = (selected.grade_labels ?? []).includes(label);
+                {classMeta.map((c) => {
+                  const linked = (selected.class_ids ?? []).includes(c.id);
                   return (
-                    <button key={label} onClick={() => toggleLink(selected, label)}
+                    <button key={c.id} onClick={() => toggleLink(selected, c.id)}
                       aria-pressed={linked}
+                      title={c.grade_label}
                       className={`rounded-xl border px-3 py-1.5 text-[0.68rem] font-extrabold transition-all ${
                         linked
                           ? "border-[#0e5c3a] bg-[#0e5c3a] text-[#e7cf9a] shadow-md"
                           : "border-[#dfe2da] bg-[#fbfbf8] text-[#5c6f65] hover:border-[#0e5c3a]/50"
                       }`}>
-                      {linked ? "✓ " : ""}{label}
+                      {linked ? "✓ " : ""}{c.grade_label} — {c.name}
                     </button>
                   );
                 })}
               </div>
-              {(selected.grade_labels ?? []).length === 0 && (
+              {(selected.class_ids ?? []).length === 0 && (
                 <div className="mt-2 flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[0.62rem] font-bold text-amber-800">
-                  <Info size={12} /> هذه المادة غير مرتبطة بأي صف — لن تظهر في الرصد ولا في التقارير حتى تربطها بصف واحد على الأقل.
+                  <Info size={12} /> هذه المادة غير مرتبطة بأي فصل — لن تظهر في الرصد ولا في التقارير حتى تربطها بفصل واحد على الأقل.
                 </div>
               )}
             </div>

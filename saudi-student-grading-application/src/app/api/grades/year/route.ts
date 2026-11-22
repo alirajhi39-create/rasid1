@@ -21,18 +21,17 @@ export async function GET(req: Request) {
   }
 
   const [classOwn, subjectOwn] = await Promise.all([
-    db.execute(sql`SELECT grade_label FROM classes WHERE id = ${classId} AND teacher_id = ${session.sub} LIMIT 1`),
+    db.execute(sql`SELECT 1 FROM classes WHERE id = ${classId} AND teacher_id = ${session.sub} LIMIT 1`),
     db.execute(sql`SELECT 1 FROM subjects WHERE id = ${subjectId} AND teacher_id = ${session.sub} LIMIT 1`),
   ]);
   if (classOwn.rows.length === 0 || subjectOwn.rows.length === 0) {
     return Response.json({ ok: false, error: "الفصل أو المادة غير موجودان" }, { status: 404 });
   }
-  const gradeLabel = String((classOwn.rows[0] as { grade_label: string }).grade_label);
   const linkCheck = await db.execute(sql`
-    SELECT 1 FROM subject_grade_links WHERE subject_id = ${subjectId} AND grade_label = ${gradeLabel} LIMIT 1
+    SELECT 1 FROM subject_class_links WHERE subject_id = ${subjectId} AND class_id = ${classId} LIMIT 1
   `);
   if (linkCheck.rows.length === 0) {
-    return Response.json({ ok: false, error: "هذه المادة غير مرتبطة بهذا الصف", notLinked: true }, { status: 400 });
+    return Response.json({ ok: false, error: "هذه المادة غير مرتبطة بهذا الفصل", notLinked: true }, { status: 400 });
   }
 
   const students = await db.execute(sql`

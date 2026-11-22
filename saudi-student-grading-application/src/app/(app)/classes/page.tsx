@@ -74,7 +74,7 @@ export default function ClassesPage() {
     const r = await fetch(`/api/classes/${c.id}/link-subjects`, { method: "POST" });
     const d = await r.json();
     if (d.ok) {
-      toast(d.linked > 0 ? `رُبطت ${d.linked} مادة بصف «${c.grade_label}»` : "كل المواد مرتبطة بهذا الصف بالفعل");
+      toast(d.linked > 0 ? `رُبطت ${d.linked} مادة بالفصل «${c.grade_label} — ${c.name}»` : "كل المواد مرتبطة بهذا الفصل بالفعل");
       load();
     } else toast(d.error ?? "تعذر الربط", "error");
   };

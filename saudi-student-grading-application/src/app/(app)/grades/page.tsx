@@ -9,7 +9,7 @@ import {
 import { toast } from "@/components/AppShell";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
-type SubjectItem = { id: number; name: string; color: string; is_active: boolean; grade_labels?: string[] };
+type SubjectItem = { id: number; name: string; color: string; is_active: boolean; class_ids?: number[] };
 type Component = { id: number; name: string; category: string; max_score: number; weight_label: string; is_active: boolean };
 type StudentRow = { id: number; full_name: string; national_id: string };
 type SubjectInfo = { id: number; name: string; max_total: string | number; pass_score: string | number; color: string };
@@ -61,11 +61,10 @@ export default function GradesPage() {
     });
   }, []);
 
-  // المواد الظاهرة = المرتبطة بصف الفصل المختار فقط
-  const activeClassGradeLabel = classes.find((c) => String(c.id) === classId)?.grade_label ?? "";
+  // المواد الظاهرة = المرتبطة بهذا الفصل تحديداً
   const linkedSubjects = useMemo(
-    () => subjects.filter((s) => !activeClassGradeLabel || (s.grade_labels ?? []).includes(activeClassGradeLabel)),
-    [subjects, activeClassGradeLabel]
+    () => subjects.filter((s) => !classId || (s.class_ids ?? []).map(Number).includes(Number(classId))),
+    [subjects, classId]
   );
 
   // لو تغير الفصل وما عادت المادة المختارة مرتبطة بصفه — اختر أول مادة مرتبطة
@@ -352,8 +351,8 @@ export default function GradesPage() {
         ) : notLinked ? (
           <div className="p-12 text-center">
             <AlertTriangle className="mx-auto text-amber-500" size={36} />
-            <p className="mt-2 font-bold text-[#5c6f65]">هذه المادة غير مرتبطة بهذا الصف</p>
-            <p className="mt-1 text-[0.72rem] text-[#8a968d]">اربط المادة بالصف من صفحة المواد والتوزيع لتظهر هنا</p>
+            <p className="mt-2 font-bold text-[#5c6f65]">هذه المادة غير مرتبطة بفصل «{activeClass ? `${activeClass.grade_label} — ${activeClass.name}` : "المختار"}»</p>
+            <p className="mt-1 text-[0.72rem] text-[#8a968d]">اربط المادة بهذا الفصل من صفحة المواد والتوزيع لتظهر درجاته هنا</p>
             <Link href="/subjects" className="btn btn-primary mt-3">ربط المواد بالصفوف</Link>
           </div>
         ) : linkedSubjects.length === 0 ? (

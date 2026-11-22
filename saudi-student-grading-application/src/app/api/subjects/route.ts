@@ -28,8 +28,8 @@ export async function GET() {
         FROM grade_components gc WHERE gc.subject_id = s.id
       ), '[]'::json) AS components,
       COALESCE((
-        SELECT array_agg(l.grade_label) FROM subject_grade_links l WHERE l.subject_id = s.id
-      ), '{}'::text[]) AS grade_labels
+        SELECT array_agg(l.class_id) FROM subject_class_links l WHERE l.subject_id = s.id
+      ), '{}'::int[]) AS class_ids
     FROM subjects s
     WHERE s.teacher_id = ${session.sub}
     ORDER BY s.sort_order ASC, s.id ASC
@@ -61,12 +61,12 @@ export async function POST(req: Request) {
       `);
     }
   }
-  // المادة الجديدة تظهر افتراضياً في كل صفوف المعلم (يمكن ضبط الربط لاحقاً)
+  // المادة الجديدة تظهر افتراضياً في كل فصول المعلم (يمكن ضبط الربط لاحقاً)
   if (subjectId) {
     await db.execute(sql`
-      INSERT INTO subject_grade_links (subject_id, grade_label)
-      SELECT DISTINCT ${subjectId}, grade_label FROM classes WHERE teacher_id = ${session.sub}
-      ON CONFLICT (subject_id, grade_label) DO NOTHING
+      INSERT INTO subject_class_links (subject_id, class_id)
+      SELECT ${subjectId}, c.id FROM classes c WHERE c.teacher_id = ${session.sub}
+      ON CONFLICT (subject_id, class_id) DO NOTHING
     `);
   }
   return Response.json({ ok: true, id: subjectId }, { status: 201 });

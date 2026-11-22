@@ -136,3 +136,21 @@ export const subjectGradeLinks = pgTable(
     index("idx_subject_grade_link_label").on(t.gradeLabel),
   ]
 );
+
+// الربط المباشر لكل فصل — المادة تظهر فقط في الفصول المرتبطة بها
+export const subjectClassLinks = pgTable(
+  "subject_class_links",
+  {
+    id: serial("id").primaryKey(),
+    subjectId: integer("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    classId: integer("class_id")
+      .notNull()
+      .references(() => classes.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("uq_subject_class_link").on(t.subjectId, t.classId),
+    index("idx_subject_class_link_class").on(t.classId),
+  ]
+);

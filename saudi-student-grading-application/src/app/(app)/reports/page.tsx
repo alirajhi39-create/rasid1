@@ -10,7 +10,7 @@ import {
 import { toast } from "@/components/AppShell";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
-type SubjectItem = { id: number; name: string; color: string; is_active: boolean; grade_labels?: string[] };
+type SubjectItem = { id: number; name: string; color: string; is_active: boolean; class_ids?: number[] };
 type Component = { id: number; name: string; category: string; max_score: number; weight_label: string; is_active: boolean };
 type StudentRow = { id: number; full_name: string; national_id: string };
 type SubjectInfo = { id: number; name: string; max_total: string | number; pass_score: string | number; color: string };
@@ -59,11 +59,10 @@ function ReportsInner() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  // المواد الظاهرة = المرتبطة بصف الفصل المختار فقط
-  const activeClassGradeLabel = classes.find((c) => String(c.id) === classId)?.grade_label ?? "";
+  // المواد الظاهرة = المرتبطة بهذا الفصل تحديداً
   const linkedSubjects = useMemo(
-    () => subjects.filter((s) => !activeClassGradeLabel || (s.grade_labels ?? []).includes(activeClassGradeLabel)),
-    [subjects, activeClassGradeLabel]
+    () => subjects.filter((s) => !classId || (s.class_ids ?? []).map(Number).includes(Number(classId))),
+    [subjects, classId]
   );
 
   useEffect(() => {
@@ -314,8 +313,8 @@ function ReportsInner() {
           </div>
         </div>
         {linkedSubjects.length === 0 && (
-          <div className="flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-[0.72rem] font-bold text-amber-800">
-            <AlertCircle size={15} /> لا توجد مواد مرتبطة بصف هذا الفصل — اربط المواد من «المواد والتوزيع» لتظهر هنا.
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-[0.72rem] font-bold text-amber-800">
+            <AlertCircle size={15} /> لا توجد مواد مرتبطة بهذا الفصل — اربطها من «المواد والتوزيع» أو زر «ربط كل المواد» في صفحة الفصول.
           </div>
         )}
         {tab !== "year" && !loading && gradedCount === 0 && linkedSubjects.length > 0 && (

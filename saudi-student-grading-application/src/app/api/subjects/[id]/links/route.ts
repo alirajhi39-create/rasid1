@@ -6,8 +6,8 @@ import { getSession } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 /**
- * حفظ ربط المادة بالصفوف — المادة تظهر فقط في الصفوف المرتبطة
- * (grade_label مثل «الصف الثالث المتوسط») في الرصد والتقارير والتصدير.
+ * حفظ ربط المادة بالفصول — المادة تظهر فقط في الفصول المرتبطة بها.
+ * يستلم قائمة معرّفات الفصول (classIds) الخاصة بالمعلم نفسه.
  */
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -24,18 +24,23 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const body = await req.json().catch(() => ({}));
-  const gradeLabels = Array.isArray(body?.gradeLabels)
-    ? (body.gradeLabels as unknown[]).map((v) => String(v).trim()).filter(Boolean).slice(0, 50)
-    : [];
+  const rawClassIds = Array.isArray(body?.classIds) ? (body.classIds as unknown[]) : [];
 
-  await db.execute(sql`DELETE FROM subject_grade_links WHERE subject_id = ${subjectId}`);
-  for (const label of gradeLabels) {
+  // نتحقق أن كل فصل مملوك للمعلم نفسه
+  const owned = await db.execute<{ id: number }>(
+    sql`SELECT id FROM classes WHERE teacher_id = ${session.sub}`
+  );
+  const ownedSet = new Set(owned.rows.map((r) => Number(r.id)));
+  const classIds = [...new Set(rawClassIds.map((v) => Math.trunc(Number(v))).filter((n) => ownedSet.has(n)))].slice(0, 100);
+
+  await db.execute(sql`DELETE FROM subject_class_links WHERE subject_id = ${subjectId}`);
+  for (const classId of classIds) {
     await db.execute(sql`
-      INSERT INTO subject_grade_links (subject_id, grade_label)
-      VALUES (${subjectId}, ${label})
-      ON CONFLICT (subject_id, grade_label) DO NOTHING
+      INSERT INTO subject_class_links (subject_id, class_id)
+      VALUES (${subjectId}, ${classId})
+      ON CONFLICT (subject_id, class_id) DO NOTHING
     `);
   }
 
-  return Response.json({ ok: true, gradeLabels });
+  return Response.json({ ok: true, classIds });
 }
