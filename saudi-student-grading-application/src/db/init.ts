@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS grade_components (
   id SERIAL PRIMARY KEY,
   subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  category TEXT NOT NULL DEFAULT 'formative',
+  category TEXT NOT NULL DEFAULT 'performance',
   max_score NUMERIC(6,2) NOT NULL DEFAULT 10,
   weight_label TEXT NOT NULL DEFAULT '',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -116,6 +116,19 @@ CREATE TABLE IF NOT EXISTS subject_grade_links (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
 CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
+
+-- النموذج الجديد: المهام الأدائية 40 + التقويمات التحريرية 60 (آمن للتكرار)
+-- 1) الأعمدة الأدائية أولاً: المهام الأدائية والمشاركة
+UPDATE grade_components SET category='performance' WHERE category='formative' AND (name ILIKE '%أدائ%' OR name ILIKE '%مشاركة%' OR name ILIKE '%تفاعل%');
+-- 2) ما تبقى من formative وfinal وcustom → تحريرية
+UPDATE grade_components SET category='written' WHERE category IN ('formative','final','custom');
+-- 3) ضبط الأعظميات للنموذج الجديد
+UPDATE grade_components SET max_score=25 WHERE name='المهام الأدائية' AND max_score=20;
+UPDATE grade_components SET max_score=20 WHERE name='الاختبار القصير' AND max_score=15;
+UPDATE grade_components SET name='الاختبارات القصيرة' WHERE name='الاختبار القصير';
+UPDATE grade_components SET name='الاختبار النهائي التحريري' WHERE name='الاختبار النهائي — تحريري';
+-- 4) عمود «عملي / شفهي» القديم: يُرحَّل للأدائية ويُوقَف مع الاحتفاظ بدرجاته
+UPDATE grade_components SET category='performance', is_active=FALSE WHERE name='الاختبار النهائي — عملي / شفهي';
 `;
 
 // Backfill يُنفذ مرة واحدة في العمر عبر جدول rased_meta —
@@ -127,14 +140,13 @@ FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
 ON CONFLICT (subject_id, grade_label) DO NOTHING;
 `;
 
-// توزيع الدرجات الافتراضي وفق لائحة تقويم الطالب (أعمال السنة 60 + النهائي 40)
+// توزيع الدرجات الافتراضي: المهام الأدائية 40 + التقويمات التحريرية 60 = 100
 const DEFAULT_COMPONENTS = [
-  { name: "المهام الأدائية", category: "formative", maxScore: 20, weightLabel: "أداء عملي", sortOrder: 1 },
-  { name: "المشاركة والتفاعل الصفي", category: "formative", maxScore: 15, weightLabel: "", sortOrder: 2 },
-  { name: "الواجبات والتطبيقات", category: "formative", maxScore: 10, weightLabel: "", sortOrder: 3 },
-  { name: "الاختبار القصير", category: "formative", maxScore: 15, weightLabel: "تحريري", sortOrder: 4 },
-  { name: "الاختبار النهائي — تحريري", category: "final", maxScore: 30, weightLabel: "نهائي", sortOrder: 5 },
-  { name: "الاختبار النهائي — عملي / شفهي", category: "final", maxScore: 10, weightLabel: "نهائي", sortOrder: 6 },
+  { name: "المهام الأدائية", category: "performance", maxScore: 25, weightLabel: "أداء عملي", sortOrder: 1 },
+  { name: "المشاركة والتفاعل الصفي", category: "performance", maxScore: 15, weightLabel: "", sortOrder: 2 },
+  { name: "الواجبات والتطبيقات", category: "written", maxScore: 10, weightLabel: "", sortOrder: 3 },
+  { name: "الاختبارات القصيرة", category: "written", maxScore: 20, weightLabel: "تحريري", sortOrder: 4 },
+  { name: "الاختبار النهائي التحريري", category: "written", maxScore: 30, weightLabel: "نهائي", sortOrder: 5 },
 ] as const;
 
 const DEFAULT_SUBJECTS: Array<{ name: string; color: string }> = [

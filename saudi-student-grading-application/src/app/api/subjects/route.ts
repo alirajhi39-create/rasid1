@@ -6,12 +6,11 @@ import { getSession } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_COMPONENTS = [
-  { name: "المهام الأدائية", category: "formative", maxScore: 20, weightLabel: "أداء عملي", sortOrder: 1 },
-  { name: "المشاركة والتفاعل الصفي", category: "formative", maxScore: 15, weightLabel: "", sortOrder: 2 },
-  { name: "الواجبات والتطبيقات", category: "formative", maxScore: 10, weightLabel: "", sortOrder: 3 },
-  { name: "الاختبار القصير", category: "formative", maxScore: 15, weightLabel: "تحريري", sortOrder: 4 },
-  { name: "الاختبار النهائي — تحريري", category: "final", maxScore: 30, weightLabel: "نهائي", sortOrder: 5 },
-  { name: "الاختبار النهائي — عملي / شفهي", category: "final", maxScore: 10, weightLabel: "نهائي", sortOrder: 6 },
+  { name: "المهام الأدائية", category: "performance", maxScore: 25, weightLabel: "أداء عملي", sortOrder: 1 },
+  { name: "المشاركة والتفاعل الصفي", category: "performance", maxScore: 15, weightLabel: "", sortOrder: 2 },
+  { name: "الواجبات والتطبيقات", category: "written", maxScore: 10, weightLabel: "", sortOrder: 3 },
+  { name: "الاختبارات القصيرة", category: "written", maxScore: 20, weightLabel: "تحريري", sortOrder: 4 },
+  { name: "الاختبار النهائي التحريري", category: "written", maxScore: 30, weightLabel: "نهائي", sortOrder: 5 },
 ];
 
 export async function GET() {

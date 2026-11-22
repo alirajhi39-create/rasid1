@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
-  School, Plus, Pencil, Trash2, X, Users, GraduationCap, Loader2, CheckCircle2,
+  School, Plus, Pencil, Trash2, X, Users, GraduationCap, Loader2, CheckCircle2, Link2,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
-type ClassItem = { id: number; name: string; grade_label: string; stage: string; sort_order: number; student_count: number };
+type ClassItem = { id: number; name: string; grade_label: string; stage: string; sort_order: number; student_count: number; subject_count?: number; total_subjects?: number };
 
 const STAGES = ["ابتدائي", "متوسط", "ثانوي"] as const;
 const GRADE_SUGGESTIONS: Record<string, string[]> = {
@@ -53,7 +53,7 @@ export default function ClassesPage() {
     const d = await r.json();
     setSaving(false);
     if (d.ok) {
-      toast(editTarget ? "حُدّثت بيانات الفصل" : "أُضيف الفصل الجديد");
+      toast(editTarget ? "حُدّثت بيانات الفصل" : "أُضيف الفصل — اربط المواد به من بطاقة الفصل");
       setModalOpen(false);
       load();
     } else toast(d.error ?? "تعذر الحفظ", "error");
@@ -68,6 +68,15 @@ export default function ClassesPage() {
       setDeleteTarget(null);
       load();
     } else toast(d.error ?? "تعذر الحذف", "error");
+  };
+
+  const linkAllSubjects = async (c: ClassItem) => {
+    const r = await fetch(`/api/classes/${c.id}/link-subjects`, { method: "POST" });
+    const d = await r.json();
+    if (d.ok) {
+      toast(d.linked > 0 ? `رُبطت ${d.linked} مادة بصف «${c.grade_label}»` : "كل المواد مرتبطة بهذا الصف بالفعل");
+      load();
+    } else toast(d.error ?? "تعذر الربط", "error");
   };
 
   const totalStudents = classes.reduce((a, c) => a + Number(c.student_count), 0);
@@ -105,10 +114,24 @@ export default function ClassesPage() {
                     <School size={26} />
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between border-t border-[#eef0ea] pt-3">
-                  <span className="inline-flex items-center gap-1.5 text-[0.78rem] font-extrabold text-[#3c4f44]">
-                    <Users size={15} className="text-[#0e5c3a]" /> {Number(c.student_count)} طالباً
-                  </span>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#eef0ea] pt-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="inline-flex items-center gap-1.5 text-[0.78rem] font-extrabold text-[#3c4f44]">
+                      <Users size={15} className="text-[#0e5c3a]" /> {Number(c.student_count)} طالباً
+                    </span>
+                    {/* حالة ربط المواد بهذا الصف */}
+                    {(c.subject_count ?? 0) < (c.total_subjects ?? 0) ? (
+                      <button onClick={() => linkAllSubjects(c)}
+                        title="ربط كل المواد النشطة بهذا الصف بنقرة واحدة"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[0.62rem] font-extrabold text-amber-800 ring-1 ring-amber-300 transition hover:bg-amber-100">
+                        <Link2 size={12} /> المواد: {c.subject_count ?? 0} من {c.total_subjects ?? 0} — اربط الكل
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-[0.62rem] font-extrabold text-emerald-800 ring-1 ring-emerald-200">
+                        <CheckCircle2 size={12} /> المواد: {c.subject_count ?? 0} — كلها مرتبطة
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-1.5">
                     <button onClick={() => openEdit(c)} className="grid h-8 w-8 place-items-center rounded-lg text-[#0e5c3a] transition hover:bg-emerald-50"><Pencil size={16} /></button>
                     <button onClick={() => setDeleteTarget(c)} className="grid h-8 w-8 place-items-center rounded-lg text-red-600 transition hover:bg-red-50"><Trash2 size={16} /></button>

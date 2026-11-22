@@ -150,20 +150,19 @@ html, body {
 
 .page-break { break-after: page; page-break-after: always; }
 
-/* ============ الطباعة ============ */
+/* ============ الطباعة — باتجاه أفقي (Landscape) ============ */
 @media print {
-  @page { size: A4; margin: 8mm; }
+  @page { size: A4 landscape; margin: 9mm 11mm; }
   html, body { background: #fff !important; }
   .app-chrome, .no-print { display: none !important; }
   .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .print-sheet {
     border: none !important; box-shadow: none !important; max-width: none !important;
-    padding: 0 !important; margin: 0 !important; break-inside: auto;
+    padding: 0 !important; margin: 0 !important; break-inside: auto; width: 100% !important;
   }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
-  .sheet-table { font-size: .6rem; }
-  .sheet-table th, .sheet-table td { padding: .18rem .2rem; }
-  .print-sheet { padding: 0 !important; }
+  .sheet-table { font-size: .66rem; }
+  .sheet-table th, .sheet-table td { padding: .26rem .32rem; }
   tr { break-inside: avoid; }
 }
 

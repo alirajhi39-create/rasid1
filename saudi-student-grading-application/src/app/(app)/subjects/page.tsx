@@ -8,7 +8,7 @@ import {
 import { toast } from "@/components/AppShell";
 
 type Component = {
-  id: number; name: string; category: "formative" | "final" | "custom";
+  id: number; name: string; category: "performance" | "written";
   maxScore: number; weightLabel: string; isActive: boolean; sortOrder: number;
 };
 type Subject = {
@@ -18,12 +18,55 @@ type Subject = {
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 
 const CATEGORY_META = {
-  formative: { label: "أعمال السنة", hint: "يُفترض أن يكون مجموعها 60", tone: "bg-teal-50 text-teal-800 ring-teal-200" },
-  final: { label: "الاختبار النهائي", hint: "يُفترض أن يكون مجموعها 40", tone: "bg-indigo-50 text-indigo-800 ring-indigo-200" },
-  custom: { label: "خانة مخصصة", hint: "خانة إضافية مرنة", tone: "bg-amber-50 text-amber-800 ring-amber-200" },
+  performance: { label: "المهام الأدائية", hint: "مجموعها 40 درجة", target: 40, tone: "bg-teal-50 text-teal-800 ring-teal-200", bar: "#0f766e" },
+  written: { label: "التقويمات التحريرية", hint: "مجموعها 60 درجة", target: 60, tone: "bg-indigo-50 text-indigo-800 ring-indigo-200", bar: "#3730a3" },
 } as const;
 
 const PALETTE = ["#0e5c3a", "#0f766e", "#1d4ed8", "#be123d", "#8a5a00", "#4338ca", "#0369a1", "#a21caf"];
+
+/** صف خانة واحدة في محرر التوزيع — مشترك بين المجموعتين */
+function ComponentRow({ c, idx, onChange, onRemove }: {
+  c: Component;
+  idx: number;
+  onChange: (idx: number, patch: Partial<Component>) => void;
+  onRemove: (idx: number) => void;
+}) {
+  return (
+    <tr className={`transition ${c.isActive ? "" : "bg-[#fafaf8] opacity-60"}`}>
+      <td className="px-2 text-center text-[#cfd4cb]"><GripVertical size={15} className="mx-auto" /></td>
+      <td className="px-3 py-1.5">
+        <input className="input !border-transparent !bg-transparent !py-1.5 font-extrabold hover:!border-[#dfe2da] focus:!border-[#0e5c3a]"
+          value={c.name} onChange={(e) => onChange(idx, { name: e.target.value })} aria-label="اسم الخانة" />
+      </td>
+      <td className="px-3 py-1.5">
+        <select className={`chip !cursor-pointer border-0 outline-none ring-1 ${CATEGORY_META[c.category].tone}`}
+          value={c.category} onChange={(e) => onChange(idx, { category: e.target.value as Component["category"] })}>
+          <option value="performance">المهام الأدائية</option>
+          <option value="written">التقويمات التحريرية</option>
+        </select>
+      </td>
+      <td className="px-3 py-1.5">
+        <input className="input !border-transparent !bg-transparent !py-1.5 text-[0.72rem] hover:!border-[#dfe2da] focus:!border-[#0e5c3a]"
+          placeholder="أداء عملي / شفهي…" value={c.weightLabel} onChange={(e) => onChange(idx, { weightLabel: e.target.value })} />
+      </td>
+      <td className="px-3 py-1.5 text-center">
+        <input type="number" min={0} max={1000} step={0.5}
+          className="input mx-auto !w-20 !border-[#dfe2da] !py-1.5 text-center font-black tabular-nums"
+          value={c.maxScore} onChange={(e) => onChange(idx, { maxScore: Number(e.target.value) })} />
+      </td>
+      <td className="px-3 py-1.5 text-center">
+        <button onClick={() => onChange(idx, { isActive: !c.isActive })}
+          className={`relative h-6 w-11 rounded-full transition ${c.isActive ? "bg-emerald-600" : "bg-[#d8dbd2]"}`}
+          title={c.isActive ? "الخانة مفتوحة — اضغط للإغلاق" : "الخانة مغلقة — اضغط للفتح"} aria-pressed={c.isActive}>
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${c.isActive ? "right-0.5" : "right-[22px]"}`} />
+        </button>
+      </td>
+      <td className="px-2 text-center">
+        <button onClick={() => onRemove(idx)} className="grid h-8 w-8 place-items-center rounded-lg text-red-500 transition hover:bg-red-50"><Trash2 size={16} /></button>
+      </td>
+    </tr>
+  );
+}
 
 export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -104,7 +147,7 @@ export default function SubjectsPage() {
     if (!selected) return;
     const components = [
       ...selected.components,
-      { id: 0, name: category === "final" ? "خانة نهائية جديدة" : category === "custom" ? "خانة مخصصة جديدة" : "خانة أعمال سنة جديدة",
+      { id: 0, name: category === "performance" ? "مهمة أدائية جديدة" : "تقويم تحريري جديد",
         category, maxScore: 10, weightLabel: "", isActive: true, sortOrder: selected.components.length + 1 },
     ];
     setSubjects(subjects.map((s) => (s.id === selected.id ? { ...s, components } : s)));
@@ -117,15 +160,14 @@ export default function SubjectsPage() {
   };
 
   const sums = useMemo(() => {
-    if (!selected) return { formative: 0, final: 0, custom: 0, total: 0 };
-    let formative = 0, final = 0, custom = 0;
+    if (!selected) return { performance: 0, written: 0, total: 0 };
+    let performance = 0, written = 0;
     for (const c of selected.components) {
       if (!c.isActive) continue;
-      if (c.category === "formative") formative += Number(c.maxScore) || 0;
-      else if (c.category === "final") final += Number(c.maxScore) || 0;
-      else custom += Number(c.maxScore) || 0;
+      if (c.category === "performance") performance += Number(c.maxScore) || 0;
+      else written += Number(c.maxScore) || 0;
     }
-    return { formative, final, custom, total: formative + final + custom };
+    return { performance, written, total: performance + written };
   }, [selected]);
 
   const saveDistribution = async () => {
@@ -309,8 +351,8 @@ export default function SubjectsPage() {
             {/* ملخص المطابقة مع اللائحة */}
             <div className="grid gap-2 border-b border-[#eef0ea] bg-white px-5 py-3 sm:grid-cols-3">
               {([
-                { label: "أعمال السنة", value: sums.formative, target: 60 },
-                { label: "الاختبار النهائي", value: sums.final, target: 40 },
+                { label: "المهام الأدائية", value: sums.performance, target: 40 },
+                { label: "التقويمات التحريرية", value: sums.written, target: 60 },
                 { label: "المجموع الكلي", value: sums.total, target: 100 },
               ]).map((row) => (
                 <div key={row.label} className="rounded-2xl border border-[#eef0ea] bg-[#fbfbf8] p-2.5">
@@ -326,14 +368,14 @@ export default function SubjectsPage() {
               ))}
             </div>
 
-            {/* جدول الخانات */}
+            {/* جدول الخانات — مقسّم إلى مجموعتين */}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-[0.8rem]">
                 <thead>
                   <tr className="bg-[#f4f5f0] text-[#3c4f44]">
                     <th className="w-10 px-2 py-2"></th>
                     <th className="px-3 py-2 text-right text-[0.7rem] font-extrabold">الخانة</th>
-                    <th className="px-3 py-2 text-right text-[0.7rem] font-extrabold">التصنيف</th>
+                    <th className="px-3 py-2 text-right text-[0.7rem] font-extrabold">المجموعة</th>
                     <th className="px-3 py-2 text-right text-[0.7rem] font-extrabold">ملاحظة</th>
                     <th className="px-3 py-2 text-center text-[0.7rem] font-extrabold">العظمى</th>
                     <th className="px-3 py-2 text-center text-[0.7rem] font-extrabold">الحالة</th>
@@ -341,55 +383,48 @@ export default function SubjectsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eef0ea]">
-                  {selected.components.map((c, idx) => (
-                    <tr key={idx} className={`transition ${c.isActive ? "" : "bg-[#fafaf8] opacity-60"}`}>
-                      <td className="px-2 text-center text-[#cfd4cb]"><GripVertical size={15} className="mx-auto" /></td>
-                      <td className="px-3 py-1.5">
-                        <input className="input !border-transparent !bg-transparent !py-1.5 font-extrabold hover:!border-[#dfe2da] focus:!border-[#0e5c3a]"
-                          value={c.name} onChange={(e) => updateComponent(idx, { name: e.target.value })} aria-label="اسم الخانة" />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <select className={`chip !cursor-pointer border-0 outline-none ring-1 ${CATEGORY_META[c.category].tone}`}
-                          value={c.category} onChange={(e) => updateComponent(idx, { category: e.target.value as Component["category"] })}>
-                          <option value="formative">أعمال السنة</option>
-                          <option value="final">الاختبار النهائي</option>
-                          <option value="custom">مخصصة</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <input className="input !border-transparent !bg-transparent !py-1.5 text-[0.72rem] hover:!border-[#dfe2da] focus:!border-[#0e5c3a]"
-                          placeholder="تحريري / شفهي…" value={c.weightLabel} onChange={(e) => updateComponent(idx, { weightLabel: e.target.value })} />
-                      </td>
-                      <td className="px-3 py-1.5 text-center">
-                        <input type="number" min={0} max={1000} step={0.5}
-                          className="input mx-auto !w-20 !border-[#dfe2da] !py-1.5 text-center font-black tabular-nums"
-                          value={c.maxScore} onChange={(e) => updateComponent(idx, { maxScore: Number(e.target.value) })} />
-                      </td>
-                      <td className="px-3 py-1.5 text-center">
-                        <button onClick={() => updateComponent(idx, { isActive: !c.isActive })}
-                          className={`relative h-6 w-11 rounded-full transition ${c.isActive ? "bg-emerald-600" : "bg-[#d8dbd2]"}`}
-                          title={c.isActive ? "الخانة مفتوحة — اضغط للإغلاق" : "الخانة مغلقة — اضغط للفتح"} aria-pressed={c.isActive}>
-                          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${c.isActive ? "right-0.5" : "right-[22px]"}`} />
+                  {/* ===== المهام الأدائية (مجموعها 40) ===== */}
+                  <tr className="bg-teal-50/70">
+                    <td colSpan={7} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[0.72rem] font-black text-teal-900">المهام الأدائية — مجموع {sums.performance} / 40</span>
+                        <button onClick={() => addComponent("performance")} className="inline-flex items-center gap-1 rounded-lg bg-teal-700 px-2.5 py-1 text-[0.62rem] font-extrabold text-white transition hover:bg-teal-800">
+                          <Plus size={12} /> خانة أدائية
                         </button>
-                      </td>
-                      <td className="px-2 text-center">
-                        <button onClick={() => removeComponent(idx)} className="grid h-8 w-8 place-items-center rounded-lg text-red-500 transition hover:bg-red-50"><Trash2 size={16} /></button>
-                      </td>
-                    </tr>
+                      </div>
+                    </td>
+                  </tr>
+                  {selected.components.map((c, idx) => c.category !== "performance" ? null : (
+                    <ComponentRow key={`p-${idx}`} c={c} idx={idx} onChange={updateComponent} onRemove={removeComponent} />
                   ))}
-                  {selected.components.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-sm font-bold text-[#8a968d]">لا توجد خانات — أضف خانات من الأزرار بالأسفل</td></tr>
+                  {selected.components.every((c) => c.category !== "performance") && (
+                    <tr><td colSpan={7} className="px-4 py-3 text-center text-[0.68rem] font-bold text-teal-700">لا توجد خانات أدائية — أضف أول خانة من الزر أعلاه</td></tr>
+                  )}
+                  {/* ===== التقويمات التحريرية (مجموعها 60) ===== */}
+                  <tr className="bg-indigo-50/70">
+                    <td colSpan={7} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[0.72rem] font-black text-indigo-900">التقويمات التحريرية — مجموع {sums.written} / 60</span>
+                        <button onClick={() => addComponent("written")} className="inline-flex items-center gap-1 rounded-lg bg-indigo-800 px-2.5 py-1 text-[0.62rem] font-extrabold text-white transition hover:bg-indigo-900">
+                          <Plus size={12} /> خانة تحريرية
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {selected.components.map((c, idx) => c.category !== "written" ? null : (
+                    <ComponentRow key={`w-${idx}`} c={c} idx={idx} onChange={updateComponent} onRemove={removeComponent} />
+                  ))}
+                  {selected.components.every((c) => c.category !== "written") && (
+                    <tr><td colSpan={7} className="px-4 py-3 text-center text-[0.68rem] font-bold text-indigo-700">لا توجد خانات تحريرية — أضف أول خانة من الزر أعلاه</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* أزرار الإضافة والحفظ */}
+            {/* حفظ التوزيع */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eef0ea] bg-[#fbfbf8] px-5 py-3">
-              <div className="flex flex-wrap gap-1.5">
-                <button onClick={() => addComponent("formative")} className="btn btn-ghost !py-1.5 text-[0.7rem]"><Plus size={14} /> خانة أعمال سنة</button>
-                <button onClick={() => addComponent("final")} className="btn btn-ghost !py-1.5 text-[0.7rem]"><Plus size={14} /> خانة نهائية</button>
-                <button onClick={() => addComponent("custom")} className="btn btn-ghost !py-1.5 text-[0.7rem]"><Plus size={14} /> خانة مخصصة</button>
+              <div className="flex items-center gap-2 text-[0.7rem] font-extrabold text-[#5c6f65]">
+                <Info size={14} /> أضف عدة خانات تحت كل مجموعة — المجموع النهائي يجب أن يكون 100
               </div>
               <button onClick={saveDistribution} disabled={savingDist} className="btn btn-primary">
                 {savingDist ? <Loader2 size={17} className="animate-spin" /> : <Save size={17} />} حفظ التوزيع
@@ -432,7 +467,7 @@ export default function SubjectsPage() {
               <input type="checkbox" className="mt-1 accent-[#0e5c3a]" checked={withDefaults} onChange={(e) => setWithDefaults(e.target.checked)} />
               <span className="text-[0.74rem] font-bold text-[#3c4f44]">
                 إنشاء التوزيع اللائحي الافتراضي تلقائياً
-                <span className="block text-[0.62rem] font-semibold text-[#8a968d]">مهام أدائية 20 + مشاركة 15 + واجبات 10 + اختبار قصير 15 (أعمال السنة 60) + نهائي تحريري 30 + عملي/شفهي 10 (النهائي 40)</span>
+                <span className="block text-[0.62rem] font-semibold text-[#8a968d]">مهام أدائية 25 + مشاركة وتفاعل 15 (المهام الأدائية 40) + واجبات 10 + اختبارات قصيرة 20 + اختبار نهائي تحريري 30 (التقويمات التحريرية 60)</span>
               </span>
             </label>
             <div className="mt-5 flex justify-end gap-2">

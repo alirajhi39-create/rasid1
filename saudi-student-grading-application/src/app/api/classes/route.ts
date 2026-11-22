@@ -11,7 +11,12 @@ export async function GET() {
   await ensureInitialized();
   const rows = await db.execute(sql`
     SELECT c.id, c.name, c.grade_label, c.stage, c.sort_order,
-           COUNT(s.id)::int AS student_count
+           COUNT(s.id)::int AS student_count,
+           (SELECT COUNT(DISTINCT l.subject_id)::int
+              FROM subject_grade_links l
+              JOIN subjects s ON s.id = l.subject_id AND s.teacher_id = c.teacher_id AND s.is_active = TRUE
+             WHERE l.grade_label = c.grade_label) AS subject_count,
+           (SELECT COUNT(*)::int FROM subjects s WHERE s.teacher_id = c.teacher_id AND s.is_active = TRUE) AS total_subjects
     FROM classes c
     LEFT JOIN students s ON s.class_id = c.id
     WHERE c.teacher_id = ${session.sub}

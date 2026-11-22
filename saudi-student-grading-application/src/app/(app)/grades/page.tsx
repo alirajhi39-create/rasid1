@@ -375,7 +375,7 @@ export default function GradesPage() {
                   {components.map((c) => (
                     <th key={c.id} className="min-w-[86px] border-white/10 border-s px-1 py-1.5 text-center align-middle">
                       <div className="text-[0.66rem] font-extrabold leading-tight text-white">{c.name}</div>
-                      <div className="mt-0.5 text-[0.56rem] font-bold text-[#c9a24b]">{c.category === "final" ? "نهائي" : c.category === "formative" ? "أعمال سنة" : "مخصصة"} · {Number(c.max_score)}</div>
+                      <div className="mt-0.5 text-[0.56rem] font-bold text-[#c9a24b]">{c.category === "performance" ? "أدائية" : "تحريرية"} · {Number(c.max_score)}</div>
                     </th>
                   ))}
                   <th rowSpan={2} className="min-w-[72px] border-s border-white/10 bg-[#083d28] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">المجموع<br /><span className="text-[0.55rem] font-bold text-emerald-200/70">/ {maxTotal}</span></th>

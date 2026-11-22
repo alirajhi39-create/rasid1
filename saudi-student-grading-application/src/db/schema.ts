@@ -89,7 +89,7 @@ export const gradeComponents = pgTable(
       .notNull()
       .references(() => subjects.id, { onDelete: "cascade" }),
     name: text("name").notNull(), // مثال: الاختبار القصير
-    category: text("category").notNull().default("formative"), // formative | final | custom
+    category: text("category").notNull().default("performance"), // performance (أدائية 40) | written (تحريرية 60)
     maxScore: numeric("max_score", { precision: 6, scale: 2 }).notNull().default("10"),
     weightLabel: text("weight_label").notNull().default(""), // وصف اختياري: (تحريري / عملي)
     isActive: boolean("is_active").notNull().default(true),

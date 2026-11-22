@@ -74,7 +74,7 @@ export default function RegisterPage() {
             <span className="text-[#e7cf9a]">مدرستك، فصولك، موادك — كلها لك وحدك</span>
           </h2>
           <ul className="mt-4 space-y-2 text-[0.78rem] font-semibold text-emerald-100/85">
-            <li className="flex items-center gap-2"><BookOpenCheck size={14} className="text-[#c9a24b]" /> مواد جاهزة بتوزيع لائحي (أعمال السنة 60 + النهائي 40)</li>
+            <li className="flex items-center gap-2"><BookOpenCheck size={14} className="text-[#c9a24b]" /> مواد جاهزة بتوزيع لائحي (مهام أدائية 40 + تقويمات تحريرية 60)</li>
             <li className="flex items-center gap-2"><Printer size={14} className="text-[#c9a24b]" /> كشوف مطبوعة بترويسة مدرستك ومديرها</li>
             <li className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#c9a24b]" /> بياناتك لا يراها أي معلم آخر — تشفير كامل</li>
           </ul>

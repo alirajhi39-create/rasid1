@@ -37,15 +37,22 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const cleaned = components
-    .map((c, i) => ({
-      id: c.id ? Number(c.id) : null,
-      name: String(c.name ?? "").trim(),
-      category: ["formative", "final", "custom"].includes(String(c.category)) ? String(c.category) : "custom",
-      maxScore: Math.max(0, Math.min(1000, Number(c.maxScore) || 0)),
-      weightLabel: String(c.weightLabel ?? "").trim(),
-      isActive: c.isActive !== false,
-      sortOrder: i + 1,
-    }))
+    .map((c, i) => {
+      // تطبيع الفئات القديمة إلى النموذج الجديد
+      let cat = String(c.category ?? "written");
+      if (cat === "formative") cat = "performance";
+      if (cat === "final" || cat === "custom") cat = "written";
+      if (cat !== "performance" && cat !== "written") cat = "written";
+      return {
+        id: c.id ? Number(c.id) : null,
+        name: String(c.name ?? "").trim(),
+        category: cat,
+        maxScore: Math.max(0, Math.min(1000, Number(c.maxScore) || 0)),
+        weightLabel: String(c.weightLabel ?? "").trim(),
+        isActive: c.isActive !== false,
+        sortOrder: i + 1,
+      };
+    })
     .filter((c) => c.name.length > 0);
 
   const keepIds = cleaned.filter((c) => c.id).map((c) => c.id as number);
