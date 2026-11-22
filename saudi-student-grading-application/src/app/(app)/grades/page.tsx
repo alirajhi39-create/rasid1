@@ -104,6 +104,10 @@ export default function GradesPage() {
   useEffect(() => { loadGrid(); }, [loadGrid]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
+  const perfSumMax = useMemo(() => components.filter((c) => c.category === "performance").reduce((a, c) => a + Number(c.max_score), 0), [components]);
+  const writtenSumMax = useMemo(() => components.filter((c) => c.category === "written").reduce((a, c) => a + Number(c.max_score), 0), [components]);
+  const perfCount = components.filter((c) => c.category === "performance").length;
+  const writtenCount = components.length - perfCount;
   const passScore = subject ? Number(subject.pass_score) : 50;
 
   const totals = useMemo(() => {
@@ -368,19 +372,35 @@ export default function GradesPage() {
           <div className="max-h-[64vh] overflow-auto">
             <table className="grade-grid w-full min-w-[900px] border-collapse text-[0.78rem]">
               <thead className="sticky top-0 z-20">
-                <tr className="bg-[#0a4630] text-white">
-                  <th rowSpan={2} className="sticky right-0 z-10 min-w-[230px] border-white/10 bg-[#0a4630] px-3 py-2 text-right align-middle text-[0.72rem] font-extrabold text-[#e7cf9a]">
+                {/* ===== صف المجموعتين — فوق البنود ===== */}
+                <tr className="bg-[#062e1f] text-white">
+                  <th rowSpan={3} className="sticky right-0 z-10 min-w-[230px] border-white/10 bg-[#062e1f] px-3 py-1.5 text-right align-middle text-[0.72rem] font-extrabold text-[#e7cf9a]">
                     الطالب {activeClass && <span className="block text-[0.58rem] font-semibold text-emerald-200/80">{activeClass.grade_label} — {activeClass.name}</span>}
                   </th>
+                  {perfCount > 0 && (
+                    <th colSpan={perfCount} className="border-s border-teal-800/40 bg-teal-950/70 px-2 py-1 text-center">
+                      <div className="text-[0.68rem] font-black text-teal-200">المهام الأدائية</div>
+                      <div className="text-[0.55rem] font-bold text-teal-400/90">مجموعها {perfSumMax} / 40</div>
+                    </th>
+                  )}
+                  {writtenCount > 0 && (
+                    <th colSpan={writtenCount} className="border-s border-indigo-800/40 bg-indigo-950/70 px-2 py-1 text-center">
+                      <div className="text-[0.68rem] font-black text-indigo-200">التقويمات التحريرية</div>
+                      <div className="text-[0.55rem] font-bold text-indigo-400/90">مجموعها {writtenSumMax} / 60</div>
+                    </th>
+                  )}
+                  <th rowSpan={3} className="min-w-[72px] border-s border-white/10 bg-[#062e1f] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">المجموع<br /><span className="text-[0.55rem] font-bold text-emerald-200/70">/ {maxTotal}</span></th>
+                  <th rowSpan={3} className="min-w-[52px] border-s border-white/10 bg-[#062e1f] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">النسبة</th>
+                  <th rowSpan={3} className="min-w-[66px] border-s border-white/10 bg-[#062e1f] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">التقدير</th>
+                </tr>
+                {/* ===== البنود التفصيلية ===== */}
+                <tr className="bg-[#0a4630] text-white">
                   {components.map((c) => (
                     <th key={c.id} className="min-w-[86px] border-white/10 border-s px-1 py-1.5 text-center align-middle">
                       <div className="text-[0.66rem] font-extrabold leading-tight text-white">{c.name}</div>
                       <div className="mt-0.5 text-[0.56rem] font-bold text-[#c9a24b]">{c.category === "performance" ? "أدائية" : "تحريرية"} · {Number(c.max_score)}</div>
                     </th>
                   ))}
-                  <th rowSpan={2} className="min-w-[72px] border-s border-white/10 bg-[#083d28] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">المجموع<br /><span className="text-[0.55rem] font-bold text-emerald-200/70">/ {maxTotal}</span></th>
-                  <th rowSpan={2} className="min-w-[52px] border-s border-white/10 bg-[#083d28] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">النسبة</th>
-                  <th rowSpan={2} className="min-w-[66px] border-s border-white/10 bg-[#083d28] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">التقدير</th>
                 </tr>
                 <tr className="bg-[#0c4a2f] text-[0.58rem] text-emerald-100/80">
                   {components.map((c) => <th key={c.id} className="border-s border-white/10 px-1 pb-1 pt-0 font-semibold">من {Number(c.max_score)}</th>)}

@@ -150,19 +150,27 @@ html, body {
 
 .page-break { break-after: page; page-break-after: always; }
 
-/* ============ الطباعة — باتجاه أفقي (Landscape) ============ */
+/* ============ الطباعة — أفقي افتراضياً مع إمكانية التبديل للعمودي ============ */
+@page landscape-page { size: A4 landscape; margin: 9mm 11mm; }
+@page portrait-page { size: A4 portrait; margin: 12mm 15mm; }
+@page { size: A4 landscape; margin: 9mm 11mm; }
+
+.print-sheet { page: landscape-page; }
+.print-sheet.portrait { page: portrait-page; }
+
 @media print {
-  @page { size: A4 landscape; margin: 9mm 11mm; }
   html, body { background: #fff !important; }
   .app-chrome, .no-print { display: none !important; }
   .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .print-sheet {
     border: none !important; box-shadow: none !important; max-width: none !important;
     padding: 0 !important; margin: 0 !important; break-inside: auto; width: 100% !important;
+    page: landscape-page;
   }
+  .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
-  .sheet-table { font-size: .66rem; }
-  .sheet-table th, .sheet-table td { padding: .26rem .32rem; }
+  .sheet-table { font-size: .68rem; }
+  .sheet-table th, .sheet-table td { padding: .3rem .38rem; }
   tr { break-inside: avoid; }
 }
 

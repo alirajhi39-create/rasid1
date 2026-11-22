@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -47,6 +47,7 @@ function ReportsInner() {
   const [semester, setSemester] = useState(searchParams.get("semester") ?? "1");
   const [period, setPeriod] = useState(searchParams.get("period") ?? "1");
   const [tab, setTab] = useState<TabKey>("sheet");
+  const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
   const [subject, setSubject] = useState<SubjectInfo | null>(null);
@@ -132,6 +133,36 @@ function ReportsInner() {
     return { s, perComp, total, filled, pct, band: band(pct) };
   }), [students, components, grades, maxTotal]);
 
+  // مجاميع المجموعتين لكل طالب (للطباعة: الإجماليات فقط دون البنود)
+  const perfMax = components.filter((c) => c.category === "performance").reduce((a, c) => a + Number(c.max_score), 0);
+  const writtenMax = components.filter((c) => c.category === "written").reduce((a, c) => a + Number(c.max_score), 0);
+  const grouped = useMemo(() => rows.map((r) => {
+    let perf = 0, perfFilled = 0, written = 0, writtenFilled = 0;
+    components.forEach((c, j) => {
+      const v = r.perComp[j];
+      if (v === null) return;
+      if (c.category === "performance") { perf += v; perfFilled++; }
+      else { written += v; writtenFilled++; }
+    });
+    return { ...r, perf, perfFilled, written, writtenFilled };
+  }), [rows, components]);
+
+  const groupedStats = useMemo(() => {
+    const withPerf = grouped.filter((r) => r.perfFilled > 0);
+    const withWritten = grouped.filter((r) => r.writtenFilled > 0);
+    const avgOf = (list: typeof grouped, key: "perf" | "written") =>
+      list.length ? list.reduce((a, r) => a + r[key], 0) / list.length : 0;
+    return {
+      perfAvg: avgOf(withPerf, "perf"), writtenAvg: avgOf(withWritten, "written"),
+      perfTop: withPerf.length ? Math.max(...withPerf.map((r) => r.perf)) : 0,
+      perfLow: withPerf.length ? Math.min(...withPerf.map((r) => r.perf)) : 0,
+      writtenTop: withWritten.length ? Math.max(...withWritten.map((r) => r.written)) : 0,
+      writtenLow: withWritten.length ? Math.min(...withWritten.map((r) => r.written)) : 0,
+      perfMastery: withPerf.length ? (withPerf.filter((r) => perfMax > 0 && r.perf / perfMax >= 0.6).length / withPerf.length) * 100 : 0,
+      writtenMastery: withWritten.length ? (withWritten.filter((r) => writtenMax > 0 && r.written / writtenMax >= 0.6).length / withWritten.length) * 100 : 0,
+    };
+  }, [grouped, perfMax, writtenMax]);
+
   const classAvg = rows.length ? rows.reduce((a, r) => a + r.pct, 0) / rows.length : 0;
   const passCount = rows.filter((r) => r.total >= passScore && r.filled > 0).length;
   const gradedCount = rows.filter((r) => r.filled > 0).length;
@@ -205,7 +236,18 @@ function ReportsInner() {
             <h2 className="flex items-center gap-2 text-xl font-black text-[#0a4630]"><FileText className="text-[#c9a24b]" /> التقارير والطباعة والتصدير</h2>
             <p className="text-[0.72rem] font-semibold text-[#5c6f65]">كشوف رسمية بترويسة وزارة التعليم — الفصلان الدراسيان · الفترة الأولى والثانية — جاهزة للطباعة والتصدير لنور</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* تبديل اتجاه الطباعة */}
+            <div className="flex gap-1 rounded-xl bg-[#eef1ec] p-1" title="اتجاه صفحة الطباعة">
+              <button onClick={() => setOrientation("landscape")} aria-pressed={orientation === "landscape"}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[0.72rem] font-extrabold transition ${orientation === "landscape" ? "bg-white text-[#0a4630] shadow" : "text-[#5c6f65]"}`}>
+                <RectangleHorizontal size={16} /> أفقي
+              </button>
+              <button onClick={() => setOrientation("portrait")} aria-pressed={orientation === "portrait"}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[0.72rem] font-extrabold transition ${orientation === "portrait" ? "bg-white text-[#0a4630] shadow" : "text-[#5c6f65]"}`}>
+                <RectangleVertical size={16} /> عمودي
+              </button>
+            </div>
             <button onClick={exportNoor} disabled={exporting || loading} className="btn btn-gold">
               {exporting ? <Loader2 size={17} className="animate-spin" /> : <FileSpreadsheet size={17} />}
               تصدير Excel لنور
@@ -273,7 +315,7 @@ function ReportsInner() {
       ) : (
         <div className="print-area">
           {tab === "sheet" && (
-            <div className="print-sheet">
+            <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle={`كشف رصد درجات مادة ${subject?.name ?? ""}`} axisLabel={axisLabel} />
               <table className="sheet-table">
@@ -282,25 +324,25 @@ function ReportsInner() {
                     <th rowSpan={2}>م</th>
                     <th rowSpan={2}>رقم السجل<br />المدني</th>
                     <th rowSpan={2}>اسم الطالب</th>
-                    <th colSpan={components.length}>توزيع الدرجات</th>
+                    <th colSpan={2}>توزيع الدرجات (الإجماليات)</th>
                     <th rowSpan={2}>المجموع<br />{fmt(maxTotal)}</th>
                     <th rowSpan={2}>النسبة</th>
                     <th rowSpan={2}>التقدير</th>
                     <th rowSpan={2}>توقيع ولي<br />الأمر</th>
                   </tr>
                   <tr>
-                    {components.map((c) => (
-                      <th key={c.id}>{c.name}<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(Number(c.max_score))})</span></th>
-                    ))}
+                    <th>المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(perfMax)}</span></th>
+                    <th>التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(writtenMax)}</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {grouped.map((r, i) => (
                     <tr key={r.s.id} style={r.filled > 0 && r.total < passScore ? { background: "#fdf1f1" } : undefined}>
                       <td>{i + 1}</td>
                       <td dir="ltr">{r.s.national_id || "—"}</td>
                       <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
-                      {r.perComp.map((v, j) => <td key={j}>{v === null ? "" : fmt(v)}</td>)}
+                      <td style={{ fontWeight: 700 }}>{r.perfFilled > 0 ? fmt(r.perf) : ""}</td>
+                      <td style={{ fontWeight: 700 }}>{r.writtenFilled > 0 ? fmt(r.written) : ""}</td>
                       <td style={{ fontWeight: 800 }}>{r.filled > 0 ? fmt(r.total) : ""}</td>
                       <td>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : ""}</td>
                       <td style={{ fontWeight: 800 }}>{r.filled > 0 ? r.band.label : ""}</td>
@@ -311,11 +353,8 @@ function ReportsInner() {
                 <tfoot>
                   <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
                     <td colSpan={3}>المتوسط العام للفصل / عدد الناجحين</td>
-                    {components.map((_, j) => {
-                      const colVals = rows.map((r) => r.perComp[j]).filter((v): v is number => v !== null);
-                      const avg = colVals.length ? colVals.reduce((a, b) => a + b, 0) / colVals.length : 0;
-                      return <td key={j}>{colVals.length ? avg.toFixed(1) : "—"}</td>;
-                    })}
+                    <td>{grouped.some((r) => r.perfFilled > 0) ? groupedStats.perfAvg.toFixed(1) : "—"}</td>
+                    <td>{grouped.some((r) => r.writtenFilled > 0) ? groupedStats.writtenAvg.toFixed(1) : "—"}</td>
                     <td colSpan={2}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</td>
                     <td colSpan={2}>{gradedCount > 0 ? `${passCount} / ${gradedCount}` : "—"}</td>
                   </tr>
@@ -327,8 +366,8 @@ function ReportsInner() {
 
           {tab === "notices" && (
             <div>
-              {rows.map((r, i) => (
-                <div key={r.s.id} className={`print-sheet ${i < rows.length - 1 ? "page-break" : ""} mb-6`}>
+              {grouped.map((r, i) => (
+                <div key={r.s.id} className={`print-sheet ${i < grouped.length - 1 ? "page-break" : ""} ${orientation === "portrait" ? "portrait" : ""} mb-6`}>
                   <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                     docTitle="إشعار درجات الطالب" axisLabel={axisLabel} />
                   <div className="mb-3 grid grid-cols-2 gap-2 text-[0.75rem] sm:grid-cols-4">
@@ -347,17 +386,19 @@ function ReportsInner() {
                   <table className="sheet-table">
                     <thead>
                       <tr>
-                        {components.map((c) => <th key={c.id}>{c.name}<br /><span style={{ fontWeight: 600, fontSize: "0.56rem" }}>من {fmt(Number(c.max_score))}</span></th>)}
+                        <th>المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(perfMax)}</span></th>
+                        <th>التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(writtenMax)}</span></th>
                         <th>المجموع<br />{fmt(maxTotal)}</th>
                         <th>النسبة</th><th>التقدير</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        {r.perComp.map((v, j) => <td key={j} style={{ fontWeight: 700 }}>{v === null ? "—" : fmt(v)}</td>)}
-                        <td style={{ fontWeight: 800 }}>{r.filled > 0 ? fmt(r.total) : "—"}</td>
-                        <td>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : "—"}</td>
-                        <td style={{ fontWeight: 800 }}>{r.filled > 0 ? r.band.label : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.perfFilled > 0 ? fmt(r.perf) : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.writtenFilled > 0 ? fmt(r.written) : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.filled > 0 ? fmt(r.total) : "—"}</td>
+                        <td style={{ fontSize: "1rem" }}>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.filled > 0 ? r.band.label : "—"}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -372,31 +413,27 @@ function ReportsInner() {
           )}
 
           {tab === "analysis" && (
-            <div className="print-sheet">
+            <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle="تقرير تحليل أداء الفصل" axisLabel={axisLabel} />
               <table className="sheet-table">
                 <thead>
-                  <tr><th>الخانة</th><th>العظمى</th><th>متوسط الكشف</th><th>أعلى درجة</th><th>أدنى درجة</th><th>نسبة الإتقان ≥ 60%</th></tr>
+                  <tr><th>المجموعة</th><th>العظمى</th><th>متوسط الكشف</th><th>أعلى درجة</th><th>أدنى درجة</th><th>نسبة الإتقان ≥ 60%</th></tr>
                 </thead>
                 <tbody>
-                  {components.map((c, j) => {
-                    const vals = rows.map((r) => r.perComp[j]).filter((v): v is number => v !== null);
-                    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-                    const maxV = vals.length ? Math.max(...vals) : 0;
-                    const minV = vals.length ? Math.min(...vals) : 0;
-                    const mastery = vals.length ? (vals.filter((v) => v / Number(c.max_score) >= 0.6).length / vals.length) * 100 : 0;
-                    return (
-                      <tr key={c.id}>
-                        <td style={{ textAlign: "right", fontWeight: 700 }}>{c.name}</td>
-                        <td>{fmt(Number(c.max_score))}</td>
-                        <td>{vals.length ? avg.toFixed(2) : "—"}</td>
-                        <td>{vals.length ? fmt(maxV) : "—"}</td>
-                        <td>{vals.length ? fmt(minV) : "—"}</td>
-                        <td>{vals.length ? `${mastery.toFixed(0)}%` : "—"}</td>
-                      </tr>
-                    );
-                  })}
+                  {([
+                    { label: "المهام الأدائية", max: perfMax, avg: groupedStats.perfAvg, top: groupedStats.perfTop, low: groupedStats.perfLow, mastery: groupedStats.perfMastery, any: grouped.some((r) => r.perfFilled > 0) },
+                    { label: "التقويمات التحريرية", max: writtenMax, avg: groupedStats.writtenAvg, top: groupedStats.writtenTop, low: groupedStats.writtenLow, mastery: groupedStats.writtenMastery, any: grouped.some((r) => r.writtenFilled > 0) },
+                  ]).map((row) => (
+                    <tr key={row.label}>
+                      <td style={{ textAlign: "right", fontWeight: 800 }}>{row.label}</td>
+                      <td>{fmt(row.max)}</td>
+                      <td>{row.any ? row.avg.toFixed(2) : "—"}</td>
+                      <td>{row.any ? fmt(row.top) : "—"}</td>
+                      <td>{row.any ? fmt(row.low) : "—"}</td>
+                      <td>{row.any ? `${row.mastery.toFixed(0)}%` : "—"}</td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
@@ -427,7 +464,7 @@ function ReportsInner() {
           )}
 
           {tab === "year" && (
-            <div className="print-sheet">
+            <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle="كشف العام — مجموع الفصلين والمتوسط" axisLabel={teacher?.semester ?? "الفصل الدراسي"} />
               <table className="sheet-table" style={{ fontSize: "0.56rem" }}>
