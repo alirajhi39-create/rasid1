@@ -93,7 +93,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(s
 CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
 `;
 
-// تهجير القواعد القائمة: إضافة teacher_id وربطها بأول حساب معلم (المالك الحالي للبيانات)
+// تهجير القواعد القائمة: إضافة teacher_id وفهرسة — آمن للتكرار دائماً
 const MIGRATION = `
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES teachers(id) ON DELETE CASCADE;
 ALTER TABLE subjects ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES teachers(id) ON DELETE CASCADE;
@@ -108,18 +108,23 @@ ALTER TABLE grades ADD COLUMN IF NOT EXISTS period SMALLINT NOT NULL DEFAULT 1;
 DROP INDEX IF EXISTS uq_grade_student_component;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_student_component_sem_per ON grades(student_id, component_id, semester, period);
 
--- ربط المواد بالصفوف (الصفوف الحالية تُربط بكل موادها للحفاظ على الظهور السابق)
+-- جدول الربط (إنشاء فقط — لا يعيد إدراج أي صفوف!)
 CREATE TABLE IF NOT EXISTS subject_grade_links (
   id SERIAL PRIMARY KEY,
   subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   grade_label TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
+CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
+`;
+
+// Backfill يُنفذ مرة واحدة في العمر عبر جدول rased_meta —
+// حتى لا تُعاد كتابة الروابط بعد أن يفك المعلم ربطها
+const BACKFILL_LINKS = `
 INSERT INTO subject_grade_links (subject_id, grade_label)
 SELECT DISTINCT s.id, c.grade_label
 FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
-ON CONFLICT DO NOTHING;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_subject_grade_link ON subject_grade_links(subject_id, grade_label);
-CREATE INDEX IF NOT EXISTS idx_subject_grade_link_label ON subject_grade_links(grade_label);
+ON CONFLICT (subject_id, grade_label) DO NOTHING;
 `;
 
 // توزيع الدرجات الافتراضي وفق لائحة تقويم الطالب (أعمال السنة 60 + النهائي 40)
@@ -233,9 +238,17 @@ export async function initializeDatabase(): Promise<InitReport> {
     gradesSeeded: 0,
   };
 
-  // 1) إنشاء الجداول + تهجير القواعد القائمة
+  // 1) إنشاء الجداول + تهجير القواعد القائمة (DDL آمن للتكرار)
   await db.execute(sql.raw(DDL));
   await db.execute(sql.raw(MIGRATION));
+  // جدول الترحيل الأحادي (يمنع إعادة أي Backfill مستقبلاً)
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS rased_meta (key TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  const mark = await db.execute<{ key: string }>(sql`
+    INSERT INTO rased_meta (key) VALUES ('subject_links_backfill_v1')
+    ON CONFLICT (key) DO NOTHING RETURNING key
+  `);
+  // يُنفذ Backfill مرة واحدة في العمر — والأفضل تنفيذه في النهاية بعد التبذير
+  const linksBackfillPending = mark.rows.length > 0;
   report.tablesCreated = true;
 
   // 2) حساب أول معلم (يُنشأ فقط إذا لم توجد أي حسابات — الحساب المالك للبيانات الحالية)
@@ -333,17 +346,14 @@ export async function initializeDatabase(): Promise<InitReport> {
     report.gradesSeeded = insertedGrades;
   }
 
-  // ربط المواد بجميع صفوف المالك (القواعد الجديدة بعد البذر؛ الأقدم مغطاة في MIGRATION)
-  if (ownerId) {
-    await db.execute(sql`
-      INSERT INTO subject_grade_links (subject_id, grade_label)
-      SELECT DISTINCT s.id, c.grade_label
-      FROM subjects s JOIN classes c ON c.teacher_id = s.teacher_id
-      WHERE s.teacher_id = ${ownerId}
-      ON CONFLICT (subject_id, grade_label) DO NOTHING
-    `);
+  // Backfill الأحادي للربط — يُنفذ في النهاية حتى يشمل البيانات المُبذَّرة في التشغيل الأول
+  if (linksBackfillPending) {
+    await db.execute(sql.raw(BACKFILL_LINKS));
   }
 
+  // ملاحظة: لا يوجد أي ربط تلقائي ضمني بعد هذه النقطة — الروابط تنشأ فقط عبر:
+  // 1) Backfill الأحادي أعلاه (مرة واحدة في العمر — لا يمس ما يفكّه المعلم لاحقاً)
+  // 2) إنشاء مادة جديدة (تُربط بكل الصفوف — والمعلم يفك ما يشاء ويبقى مفكوكاً)
   return report;
 }
 

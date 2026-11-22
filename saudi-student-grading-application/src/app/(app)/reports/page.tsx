@@ -430,25 +430,28 @@ function ReportsInner() {
             <div className="print-sheet">
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle="كشف العام — مجموع الفصلين والمتوسط" axisLabel={teacher?.semester ?? "الفصل الدراسي"} />
-              <table className="sheet-table" style={{ fontSize: "0.62rem" }}>
+              <table className="sheet-table" style={{ fontSize: "0.56rem" }}>
                 <thead>
                   <tr>
                     <th rowSpan={2}>م</th>
                     <th rowSpan={2}>رقم السجل المدني</th>
                     <th rowSpan={2}>اسم الطالب</th>
-                    <th colSpan={3}>الفصل الدراسي الأول</th>
-                    <th colSpan={3}>الفصل الدراسي الثاني</th>
-                    <th colSpan={4}>محصلة العام</th>
+                    <th colSpan={4}>الفصل الدراسي الأول</th>
+                    <th colSpan={4}>الفصل الدراسي الثاني</th>
+                    <th colSpan={5}>محصلة العام</th>
                   </tr>
                   <tr>
                     <th>الفترة الأولى<br />({fmt(yearPeriodMax)})</th>
                     <th>الفترة الثانية<br />({fmt(yearPeriodMax)})</th>
-                    <th>المجموع<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>مجموع الفترتين<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>متوسط الفترتين<br />({fmt(yearPeriodMax)})</th>
                     <th>الفترة الأولى<br />({fmt(yearPeriodMax)})</th>
                     <th>الفترة الثانية<br />({fmt(yearPeriodMax)})</th>
-                    <th>المجموع<br />({fmt(yearPeriodMax * 2)})</th>
-                    <th>مجموع<br />الفصلين<br />({fmt(yearPeriodMax * 4)})</th>
-                    <th>المتوسط<br />({fmt(yearPeriodMax)})</th>
+                    <th>مجموع الفترتين<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>متوسط الفترتين<br />({fmt(yearPeriodMax)})</th>
+                    <th>مجموع الفصلين<br />({fmt(yearPeriodMax * 4)})</th>
+                    <th>متوسط الفصلين<br />({fmt(yearPeriodMax * 2)})</th>
+                    <th>المتوسط العام<br />({fmt(yearPeriodMax)})</th>
                     <th>النسبة</th>
                     <th>التقدير</th>
                   </tr>
@@ -457,6 +460,9 @@ function ReportsInner() {
                   {yearRows.map((r, i) => {
                     const b = band(r.percent);
                     const failing = r.yearTotal > 0 && r.avg < passScore;
+                    const sem1Avg = r.sem1 / 2;
+                    const sem2Avg = r.sem2 / 2;
+                    const yearAvgSem = r.yearTotal / 2;
                     return (
                       <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
                         <td>{i + 1}</td>
@@ -465,10 +471,13 @@ function ReportsInner() {
                         <td>{r.s1p1 > 0 ? fmt(r.s1p1) : ""}</td>
                         <td>{r.s1p2 > 0 ? fmt(r.s1p2) : ""}</td>
                         <td style={{ fontWeight: 700 }}>{r.sem1 > 0 ? fmt(r.sem1) : ""}</td>
+                        <td style={{ color: "#0e5c3a", fontWeight: 700 }}>{r.sem1 > 0 ? fmt(sem1Avg) : ""}</td>
                         <td>{r.s2p1 > 0 ? fmt(r.s2p1) : ""}</td>
                         <td>{r.s2p2 > 0 ? fmt(r.s2p2) : ""}</td>
                         <td style={{ fontWeight: 700 }}>{r.sem2 > 0 ? fmt(r.sem2) : ""}</td>
+                        <td style={{ color: "#0e5c3a", fontWeight: 700 }}>{r.sem2 > 0 ? fmt(sem2Avg) : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.yearTotal) : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3", color: "#0e5c3a" }}>{r.yearTotal > 0 ? fmt(yearAvgSem) : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.avg) : ""}</td>
                         <td style={{ background: "#f6f8f3" }}>{r.yearTotal > 0 ? `${r.percent.toFixed(1)}%` : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? b.label : ""}</td>
@@ -476,7 +485,7 @@ function ReportsInner() {
                     );
                   })}
                   {yearRows.length === 0 && (
-                    <tr><td colSpan={13} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد لهذه المادة بعد</td></tr>
+                    <tr><td colSpan={16} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد لهذه المادة بعد</td></tr>
                   )}
                 </tbody>
                 <tfoot>
@@ -485,10 +494,13 @@ function ReportsInner() {
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem1, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem1 / 2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s2p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s2p2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem2, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem2 / 2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.yearTotal, 0) / yearRows.length).toFixed(1) : "—"}</td>
+                    <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.yearTotal / 2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.avg, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? `${yearAvg.toFixed(1)}%` : "—"}</td>
                     <td>{gradedYear > 0 ? `${passingYear} / ${gradedYear}` : "—"}</td>
@@ -496,7 +508,7 @@ function ReportsInner() {
                 </tfoot>
               </table>
               <p style={{ marginTop: "0.5rem", fontSize: "0.62rem", fontWeight: 600, color: "#555" }}>
-                * درجة كل فترة من {fmt(yearPeriodMax)} · مجموع الفصل من {fmt(yearPeriodMax * 2)} · مجموع الفصلين من {fmt(yearPeriodMax * 4)} · المتوسط من {fmt(yearPeriodMax)} · التقدير حسب المتوسط ({passScore} درجة للنجاح).
+                * درجة كل فترة من {fmt(yearPeriodMax)} · مجموع الفترتين (الفصل) من {fmt(yearPeriodMax * 2)} · متوسط الفترتين من {fmt(yearPeriodMax)} · مجموع الفصلين من {fmt(yearPeriodMax * 4)} · متوسط الفصلين من {fmt(yearPeriodMax * 2)} · المتوسط العام من {fmt(yearPeriodMax)} · التقدير حسب المتوسط العام ({passScore} درجة للنجاح).
               </p>
               <SignatureRow teacher={teacher} />
             </div>
