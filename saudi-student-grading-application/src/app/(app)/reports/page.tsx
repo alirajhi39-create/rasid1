@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -23,7 +23,7 @@ type YearRow = {
   sem1: number; sem2: number; yearTotal: number; avg: number; percent: number;
   semMax: number; yearMax: number;
 };
-type TabKey = "sheet" | "notices" | "analysis" | "year";
+type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1";
 
 const SEMESTERS: Record<string, string> = { "1": "الفصل الدراسي الأول", "2": "الفصل الدراسي الثاني" };
 const PERIODS: Record<string, string> = { "1": "الفترة الأولى", "2": "الفترة الثانية" };
@@ -103,9 +103,9 @@ function ReportsInner() {
       .finally(() => setLoading(false));
   }, [classId, subjectId, semester, period]);
 
-  // بيانات ملخص العام (الفصلان والفترتان) — يُحمَّل عند فتح التبويب
+  // بيانات ملخص العام (الفصلان والفترتان) — تُحمَّل عند فتح تبويب الملخص
   useEffect(() => {
-    if (!classId || !subjectId || tab !== "year") return;
+    if (!classId || !subjectId || (tab !== "year" && tab !== "sem1")) return;
     fetch(`/api/grades/year?classId=${classId}&subjectId=${subjectId}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -171,6 +171,16 @@ function ReportsInner() {
   const gradedYear = yearRows.filter((r) => r.yearTotal > 0).length;
   const yearAvg = yearRows.length ? yearRows.reduce((a, r) => a + r.percent, 0) / yearRows.length : 0;
 
+  // إحصائيات ملخص الفصل الدراسي الأول
+  const sem1Rows = yearRows.map((r) => ({
+    ...r,
+    semAvg: r.sem1 / 2,
+    semPct: yearPeriodMax > 0 ? (r.sem1 / (2 * yearPeriodMax)) * 100 : 0,
+  }));
+  const sem1Graded = sem1Rows.filter((r) => r.sem1 > 0).length;
+  const sem1Passing = sem1Rows.filter((r) => r.semAvg >= passScore).length;
+  const sem1ClassAvg = sem1Rows.length ? sem1Rows.reduce((a, r) => a + r.semPct, 0) / sem1Rows.length : 0;
+
   // ============ تصدير Excel مطابق لقالب نور ============
   const exportNoor = () => {
     if (!subject || !teacher) return;
@@ -224,6 +234,7 @@ function ReportsInner() {
     { key: "sheet", label: "كشف الرصد الرسمي", icon: Table2 },
     { key: "notices", label: "الإشعارات الفردية", icon: UserRound },
     { key: "analysis", label: "تحليل أداء الفصل", icon: BarChart3 },
+    { key: "sem1", label: "ملخص الفصل الأول", icon: Medal },
     { key: "year", label: "ملخص الفصلين والعام", icon: Sigma },
   ];
 
@@ -463,6 +474,68 @@ function ReportsInner() {
             </div>
           )}
 
+          {tab === "sem1" && (
+            <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
+              <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
+                docTitle="كشف ملخص الفصل الدراسي الأول" axisLabel="الفصل الدراسي الأول" />
+              <table className="sheet-table">
+                <thead>
+                  <tr>
+                    <th rowSpan={2}>م</th>
+                    <th rowSpan={2}>رقم السجل<br />المدني</th>
+                    <th rowSpan={2}>اسم الطالب</th>
+                    <th colSpan={4}>الفصل الدراسي الأول</th>
+                    <th rowSpan={2}>النسبة</th>
+                    <th rowSpan={2}>التقدير</th>
+                  </tr>
+                  <tr>
+                    <th>الفترة الأولى<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(yearPeriodMax)})</span></th>
+                    <th>الفترة الثانية<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(yearPeriodMax)})</span></th>
+                    <th>مجموع الفصل الأول<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(yearPeriodMax * 2)})</span></th>
+                    <th>متوسط الفترتين<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(yearPeriodMax)})</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sem1Rows.map((r, i) => {
+                    const b = band(r.semPct);
+                    const failing = r.sem1 > 0 && r.semAvg < passScore;
+                    return (
+                      <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
+                        <td>{i + 1}</td>
+                        <td dir="ltr">{r.s.national_id || "—"}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
+                        <td>{r.s1p1 > 0 ? fmt(r.s1p1) : ""}</td>
+                        <td>{r.s1p2 > 0 ? fmt(r.s1p2) : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.sem1 > 0 ? fmt(r.sem1) : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3", color: "#0e5c3a" }}>{r.sem1 > 0 ? fmt(r.semAvg) : ""}</td>
+                        <td style={{ background: "#f6f8f3" }}>{r.sem1 > 0 ? `${r.semPct.toFixed(1)}%` : ""}</td>
+                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.sem1 > 0 ? b.label : ""}</td>
+                      </tr>
+                    );
+                  })}
+                  {sem1Rows.length === 0 && (
+                    <tr><td colSpan={9} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد للفصل الدراسي الأول بعد</td></tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                    <td colSpan={3}>المتوسط / عدد الناجحين</td>
+                    <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p1, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
+                    <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p2, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
+                    <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.sem1, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
+                    <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.semAvg, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
+                    <td>{sem1Rows.length ? `${sem1ClassAvg.toFixed(1)}%` : "—"}</td>
+                    <td>{sem1Graded > 0 ? `${sem1Passing} / ${sem1Graded}` : "—"}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <p style={{ marginTop: "0.5rem", fontSize: "0.62rem", fontWeight: 600, color: "#555" }}>
+                * درجة كل فترة من {fmt(yearPeriodMax)} · مجموع الفصل الدراسي الأول من {fmt(yearPeriodMax * 2)} · متوسط الفترتين من {fmt(yearPeriodMax)} · التقدير حسب المتوسط ({passScore} درجة للنجاح).
+              </p>
+              <SignatureRow teacher={teacher} />
+            </div>
+          )}
+
           {tab === "year" && (
             <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
@@ -571,10 +644,11 @@ function SheetHeader({ teacher, subjectName, classLabel, today, docTitle, axisLa
     <>
       <div className="ministry-head">
         <div className="col" style={{ textAlign: "right", flex: 1 }}>
-          <strong style={{ fontSize: "0.82rem" }}>المملكة العربية السعودية</strong><br />
-          <strong style={{ fontSize: "0.82rem" }}>وزارة التعليم</strong><br />
-          <span style={{ fontSize: "0.68rem" }}>{teacher?.education_admin}</span><br />
-          <span style={{ fontSize: "0.68rem" }}>{teacher?.education_office}</span>
+          <strong style={{ fontSize: "0.84rem" }}>المملكة العربية السعودية</strong><br />
+          <strong style={{ fontSize: "0.84rem" }}>وزارة التعليم</strong><br />
+          <strong style={{ fontSize: "0.74rem", display: "inline-block", marginTop: 2 }}>{teacher?.education_admin}</strong><br />
+          <span style={{ fontSize: "0.68rem", fontWeight: 700 }}>{teacher?.education_office}</span><br />
+          <strong style={{ fontSize: "0.85rem", color: "#0a4630", display: "inline-block", marginTop: 4, borderTop: "1.5px solid #c9a24b", paddingTop: 3 }}>{teacher?.school_name}</strong>
         </div>
         <div className="col" style={{ flexShrink: 0 }}>
           {/* شعار وزارة التعليم الرسمي */}
@@ -582,9 +656,8 @@ function SheetHeader({ teacher, subjectName, classLabel, today, docTitle, axisLa
             style={{ objectFit: "contain", display: "block", margin: "0 auto" }} />
         </div>
         <div className="col" style={{ textAlign: "left", flex: 1 }}>
-          <strong style={{ fontSize: "0.82rem" }}>{teacher?.school_name}</strong><br />
-          <span style={{ fontSize: "0.68rem" }}>إدارة المدرسة · {teacher?.city}</span><br />
-          <span style={{ fontSize: "0.68rem" }}>{teacher?.academic_year} · {teacher?.semester}</span><br />
+          <strong style={{ fontSize: "0.85rem" }}>العام الدراسي {teacher?.academic_year}</strong><br />
+          <span style={{ fontSize: "0.68rem" }}>{teacher?.city}</span><br />
           <span style={{ fontSize: "0.68rem" }}>تاريخ الإصدار: {today}</span>
         </div>
       </div>

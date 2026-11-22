@@ -148,6 +148,9 @@ html, body {
 .sign-box { text-align: center; min-width: 180px; }
 .sign-line { border-bottom: 1.5px solid #111; height: 2.2rem; margin-bottom: .2rem; }
 
+.sign-row { break-inside: avoid; page-break-inside: avoid; }
+.doc-title { break-inside: avoid; page-break-inside: avoid; }
+
 .page-break { break-after: page; page-break-after: always; }
 
 /* ============ الطباعة — أفقي افتراضياً مع إمكانية التبديل للعمودي ============ */
@@ -169,8 +172,12 @@ html, body {
   }
   .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
-  .sheet-table { font-size: .68rem; }
-  .sheet-table th, .sheet-table td { padding: .3rem .38rem; }
+  .sheet-table { font-size: .62rem; }
+  .sheet-table th, .sheet-table td { padding: .2rem .3rem; }
+  .ministry-head h1 { font-size: .98rem; }
+  .doc-title { font-size: .95rem; padding: .22rem 0; margin: .4rem 0 .5rem; }
+  .sign-row { margin-top: .6rem; font-size: .68rem; }
+  .sign-line { height: 1.6rem; }
   tr { break-inside: avoid; }
 }
 
