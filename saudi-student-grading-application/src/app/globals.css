@@ -166,14 +166,19 @@ html, body {
   .app-chrome, .no-print { display: none !important; }
   .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .print-sheet {
-    border: none !important; box-shadow: none !important; max-width: none !important;
-    padding: 0 !important; margin: 0 !important; break-inside: auto; width: 100% !important;
+    border: none !important; box-shadow: none !important;
+    padding: 0 !important; margin: 0 auto !important; break-inside: auto;
+    width: 100% !important; max-width: 100% !important; overflow: hidden;
     page: landscape-page;
   }
   .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
-  .sheet-table { font-size: .62rem; }
-  .sheet-table th, .sheet-table td { padding: .2rem .3rem; }
+
+  /* محاذاة دقيقة: الجدول يملأ عرض الصفحة دون أي تجاوز أو اقتطاع */
+  .sheet-table { font-size: .62rem; width: 100% !important; max-width: 100% !important; table-layout: fixed; }
+  .sheet-table th, .sheet-table td { padding: .2rem .3rem; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+  .sheet-table .nid { direction: ltr; font-variant-numeric: tabular-nums; word-break: break-all; text-align: center; }
+
   .ministry-head h1 { font-size: .98rem; }
   .doc-title { font-size: .95rem; padding: .22rem 0; margin: .4rem 0 .5rem; }
   .sign-row { margin-top: .6rem; font-size: .68rem; }

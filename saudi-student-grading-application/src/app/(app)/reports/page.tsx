@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, IdCard,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -48,6 +48,7 @@ function ReportsInner() {
   const [period, setPeriod] = useState(searchParams.get("period") ?? "1");
   const [tab, setTab] = useState<TabKey>("sheet");
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
+  const [hideNid, setHideNid] = useState(false);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
   const [subject, setSubject] = useState<SubjectInfo | null>(null);
@@ -259,6 +260,10 @@ function ReportsInner() {
                 <RectangleVertical size={16} /> عمودي
               </button>
             </div>
+            <label className="flex cursor-pointer select-none items-center gap-2 rounded-xl border border-[#e3e4dd] bg-white px-3 py-2 text-[0.7rem] font-extrabold text-[#3c4f44] hover:shadow-sm">
+              <input type="checkbox" className="accent-[#0e5c3a]" checked={hideNid} onChange={(e) => setHideNid(e.target.checked)} />
+              <IdCard size={14} /> إخفاء رقم السجل المدني في الطباعة
+            </label>
             <button onClick={exportNoor} disabled={exporting || loading} className="btn btn-gold">
               {exporting ? <Loader2 size={17} className="animate-spin" /> : <FileSpreadsheet size={17} />}
               تصدير Excel لنور
@@ -330,10 +335,21 @@ function ReportsInner() {
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle={`كشف رصد درجات مادة ${subject?.name ?? ""}`} axisLabel={axisLabel} />
               <table className="sheet-table">
+                <colgroup>
+                  <col style={{ width: "4%" }} />
+                  {!hideNid && <col style={{ width: "12%" }} />}
+                  <col style={{ width: hideNid ? "34%" : "26%" }} />
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "13%" }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th rowSpan={2}>م</th>
-                    <th rowSpan={2}>رقم السجل<br />المدني</th>
+                    {!hideNid && <th rowSpan={2}>رقم السجل<br />المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
                     <th colSpan={2}>توزيع الدرجات (الإجماليات)</th>
                     <th rowSpan={2}>المجموع<br />{fmt(maxTotal)}</th>
@@ -350,7 +366,7 @@ function ReportsInner() {
                   {grouped.map((r, i) => (
                     <tr key={r.s.id} style={r.filled > 0 && r.total < passScore ? { background: "#fdf1f1" } : undefined}>
                       <td>{i + 1}</td>
-                      <td dir="ltr">{r.s.national_id || "—"}</td>
+                      {!hideNid && <td dir="ltr" className="nid">{r.s.national_id || "—"}</td>}
                       <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
                       <td style={{ fontWeight: 700 }}>{r.perfFilled > 0 ? fmt(r.perf) : ""}</td>
                       <td style={{ fontWeight: 700 }}>{r.writtenFilled > 0 ? fmt(r.written) : ""}</td>
@@ -363,7 +379,7 @@ function ReportsInner() {
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
-                    <td colSpan={3}>المتوسط العام للفصل / عدد الناجحين</td>
+                    <td colSpan={hideNid ? 2 : 3}>المتوسط العام للفصل / عدد الناجحين</td>
                     <td>{grouped.some((r) => r.perfFilled > 0) ? groupedStats.perfAvg.toFixed(1) : "—"}</td>
                     <td>{grouped.some((r) => r.writtenFilled > 0) ? groupedStats.writtenAvg.toFixed(1) : "—"}</td>
                     <td colSpan={2}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</td>
@@ -381,10 +397,10 @@ function ReportsInner() {
                 <div key={r.s.id} className={`print-sheet ${i < grouped.length - 1 ? "page-break" : ""} ${orientation === "portrait" ? "portrait" : ""} mb-6`}>
                   <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                     docTitle="إشعار درجات الطالب" axisLabel={axisLabel} />
-                  <div className="mb-3 grid grid-cols-2 gap-2 text-[0.75rem] sm:grid-cols-4">
+                  <div className={`mb-3 grid grid-cols-2 gap-2 text-[0.75rem] ${hideNid ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
                     {[
                       ["اسم الطالب", r.s.full_name],
-                      ["رقم السجل المدني", r.s.national_id || "—"],
+                      ...(hideNid ? [] : [["رقم السجل المدني", r.s.national_id || "—"]]),
                       ["الصف / الفصل", classLabel],
                       ["المادة", subject?.name ?? ""],
                     ].map(([k, v]) => (
@@ -479,10 +495,21 @@ function ReportsInner() {
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle="كشف ملخص الفصل الدراسي الأول" axisLabel="الفصل الدراسي الأول" />
               <table className="sheet-table">
+                <colgroup>
+                  <col style={{ width: "4%" }} />
+                  {!hideNid && <col style={{ width: "13%" }} />}
+                  <col style={{ width: hideNid ? "34%" : "26%" }} />
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: hideNid ? "9%" : "8%" }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th rowSpan={2}>م</th>
-                    <th rowSpan={2}>رقم السجل<br />المدني</th>
+                    {!hideNid && <th rowSpan={2}>رقم السجل<br />المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
                     <th colSpan={4}>الفصل الدراسي الأول</th>
                     <th rowSpan={2}>النسبة</th>
@@ -502,7 +529,7 @@ function ReportsInner() {
                     return (
                       <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
                         <td>{i + 1}</td>
-                        <td dir="ltr">{r.s.national_id || "—"}</td>
+                        {!hideNid && <td dir="ltr" className="nid">{r.s.national_id || "—"}</td>}
                         <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
                         <td>{r.s1p1 > 0 ? fmt(r.s1p1) : ""}</td>
                         <td>{r.s1p2 > 0 ? fmt(r.s1p2) : ""}</td>
@@ -514,12 +541,12 @@ function ReportsInner() {
                     );
                   })}
                   {sem1Rows.length === 0 && (
-                    <tr><td colSpan={9} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد للفصل الدراسي الأول بعد</td></tr>
+                    <tr><td colSpan={hideNid ? 8 : 9} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد للفصل الدراسي الأول بعد</td></tr>
                   )}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
-                    <td colSpan={3}>المتوسط / عدد الناجحين</td>
+                    <td colSpan={hideNid ? 2 : 3}>المتوسط / عدد الناجحين</td>
                     <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p1, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
                     <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p2, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
                     <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.sem1, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
@@ -541,10 +568,18 @@ function ReportsInner() {
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
                 docTitle="كشف العام — مجموع الفصلين والمتوسط" axisLabel={teacher?.semester ?? "الفصل الدراسي"} />
               <table className="sheet-table" style={{ fontSize: "0.56rem" }}>
+                <colgroup>
+                  <col style={{ width: "3.5%" }} />
+                  {!hideNid && <col style={{ width: "10%" }} />}
+                  <col style={{ width: hideNid ? "22%" : "18%" }} />
+                  {Array.from({ length: 13 }).map((_, i) => (
+                    <col key={i} style={{ width: hideNid ? "5.5%" : "5.2%" }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
                     <th rowSpan={2}>م</th>
-                    <th rowSpan={2}>رقم السجل المدني</th>
+                    {!hideNid && <th rowSpan={2}>رقم السجل المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
                     <th colSpan={4}>الفصل الدراسي الأول</th>
                     <th colSpan={4}>الفصل الدراسي الثاني</th>
@@ -576,7 +611,7 @@ function ReportsInner() {
                     return (
                       <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
                         <td>{i + 1}</td>
-                        <td dir="ltr">{r.s.national_id || "—"}</td>
+                        {!hideNid && <td dir="ltr" className="nid">{r.s.national_id || "—"}</td>}
                         <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
                         <td>{r.s1p1 > 0 ? fmt(r.s1p1) : ""}</td>
                         <td>{r.s1p2 > 0 ? fmt(r.s1p2) : ""}</td>
@@ -595,12 +630,12 @@ function ReportsInner() {
                     );
                   })}
                   {yearRows.length === 0 && (
-                    <tr><td colSpan={16} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد لهذه المادة بعد</td></tr>
+                    <tr><td colSpan={hideNid ? 15 : 16} style={{ padding: "1.5rem" }}>لا توجد بيانات رصد لهذه المادة بعد</td></tr>
                   )}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
-                    <td colSpan={3}>المتوسط / عدد الناجحين</td>
+                    <td colSpan={hideNid ? 2 : 3}>المتوسط / عدد الناجحين</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p2, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.sem1, 0) / yearRows.length).toFixed(1) : "—"}</td>
