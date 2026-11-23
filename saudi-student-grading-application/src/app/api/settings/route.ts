@@ -11,7 +11,8 @@ export async function GET() {
   await ensureInitialized();
   const rows = await db.execute(sql`
     SELECT id, username, full_name, job_title, school_name, education_admin, education_office,
-           city, principal_name, academic_year, semester, stage
+           city, principal_name, academic_year, semester, stage,
+           band_excellent_min, band_very_good_min, band_good_min, band_pass_min
     FROM teachers WHERE id = ${session.sub} LIMIT 1
   `);
   return Response.json({ ok: true, teacher: rows.rows[0] ?? null });
@@ -23,6 +24,34 @@ export async function PUT(req: Request) {
   await ensureInitialized();
   const b = await req.json().catch(() => ({}));
   const v = (k: string) => (b?.[k] !== undefined ? String(b[k]).trim() : null);
+
+  // عتبات التقدير (إن وُجدت): تتحقق من الترتيب المنطقي وتُخزَّن
+  const bands: Record<string, number> | null =
+    b?.bandExcellent !== undefined || b?.bandVeryGood !== undefined || b?.bandGood !== undefined || b?.bandPass !== undefined
+      ? {
+          excellent: Math.round(Number(b?.bandExcellent ?? 90)),
+          veryGood: Math.round(Number(b?.bandVeryGood ?? 80)),
+          good: Math.round(Number(b?.bandGood ?? 70)),
+          pass: Math.round(Number(b?.bandPass ?? 60)),
+        }
+      : null;
+  if (bands) {
+    const { excellent, veryGood, good, pass } = bands;
+    if ([excellent, veryGood, good, pass].some((n) => !Number.isFinite(n) || n < 0 || n > 100)) {
+      return Response.json({ ok: false, error: "النسب يجب أن تكون بين 0 و 100" }, { status: 400 });
+    }
+    if (!(excellent > veryGood && veryGood > good && good > pass)) {
+      return Response.json({ ok: false, error: "يجب أن تكون النسب متناقصة: ممتاز > جيد جداً > جيد > مقبول" }, { status: 400 });
+    }
+    await db.execute(sql`
+      UPDATE teachers SET
+        band_excellent_min = ${excellent},
+        band_very_good_min = ${veryGood},
+        band_good_min = ${good},
+        band_pass_min = ${pass}
+      WHERE id = ${session.sub}
+    `);
+  }
 
   await db.execute(sql`
     UPDATE teachers SET

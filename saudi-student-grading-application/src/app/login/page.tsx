@@ -2,8 +2,8 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
+import HeroPanel from "@/components/HeroPanel";
 import {
   GraduationCap, LockKeyhole, UserRound, Eye, EyeOff, ShieldCheck,
   Loader2, KeyRound, Sparkles, FileSpreadsheet, Printer, Keyboard,
@@ -46,29 +46,18 @@ function LoginInner() {
   return (
     <main className="relative flex min-h-screen overflow-hidden bg-[#062e1f]">
       {/* ===== العمود البصري (سطح المكتب) ===== */}
-      <div className="relative hidden w-[46%] shrink-0 lg:block xl:w-[52%]">
-        <Image
-          src="/images/login-hero.jpg"
-          alt="فصل دراسي سعودي حديث"
-          fill
-          priority
-          className="object-cover object-center"
-        />
-        <div className="absolute inset-0 bg-gradient-to-l from-[#062e1f] via-[#062e1f3d] to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#062e1f] via-transparent to-transparent" />
-        <div className="absolute bottom-0 right-0 p-10 text-white">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#c9a24b]/50 bg-black/35 px-4 py-1.5 text-[0.72rem] font-extrabold text-[#e7cf9a] backdrop-blur-md">
-            <Sparkles size={13} /> لائحة تقويم الطالب في التعليم العام السعودي
-          </div>
-          <h2 className="max-w-xl text-3xl font-black leading-[1.35] text-white drop-shadow-lg xl:text-4xl">
-            من الفصل إلى السحابة…<br />
-            <span className="text-[#e7cf9a]">رصد دقيق، وطباعة رسمية، وتصدير لنور</span>
-          </h2>
-          <p className="mt-3 max-w-md text-[0.85rem] font-medium leading-relaxed text-emerald-50/85">
-            إدارة كاملة للطلاب والمواد والدرجات: المهام الأدائية والتقويمات التحريرية، مع حساب التقدير والنسبة آلياً وحفظ سحابي فوري.
-          </p>
+      <HeroPanel>
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#c9a24b]/50 bg-black/35 px-4 py-1.5 text-[0.72rem] font-extrabold text-[#e7cf9a] backdrop-blur-md">
+          <Sparkles size={13} /> لائحة تقويم الطالب في التعليم العام السعودي
         </div>
-      </div>
+        <h2 className="max-w-xl text-3xl font-black leading-[1.35] text-white drop-shadow-lg xl:text-4xl">
+          من الفصل إلى السحابة…<br />
+          <span className="text-[#e7cf9a]">رصد دقيق، وطباعة رسمية، وتصدير لنور</span>
+        </h2>
+        <p className="mt-3 max-w-md text-[0.85rem] font-medium leading-relaxed text-emerald-50/85">
+          إدارة كاملة للطلاب والمواد والدرجات: المهام الأدائية والتقويمات التحريرية، مع حساب التقدير والنسبة آلياً وحفظ سحابي فوري.
+        </p>
+      </HeroPanel>
 
       {/* ===== عمود الدخول ===== */}
       <div className="relative flex flex-1 items-center justify-center px-5 py-8 sm:px-10">

@@ -22,11 +22,14 @@ function toLatinDigits(s: string): string {
   return s.split("").map((ch) => map[ch] ?? ch).join("").replace(/[^\d.]/g, "");
 }
 
-function band(percent: number) {
-  if (percent >= 90) return { label: "ممتاز", cls: "bg-emerald-100 text-emerald-800" };
-  if (percent >= 80) return { label: "جيد جداً", cls: "bg-teal-100 text-teal-800" };
-  if (percent >= 70) return { label: "جيد", cls: "bg-blue-100 text-blue-800" };
-  if (percent >= 60) return { label: "مقبول", cls: "bg-amber-100 text-amber-800" };
+type BandMins = { excellent: number; veryGood: number; good: number; pass: number };
+const DEFAULT_BANDS: BandMins = { excellent: 90, veryGood: 80, good: 70, pass: 60 };
+
+function band(percent: number, mins: BandMins = DEFAULT_BANDS) {
+  if (percent >= mins.excellent) return { label: "ممتاز", cls: "bg-emerald-100 text-emerald-800" };
+  if (percent >= mins.veryGood) return { label: "جيد جداً", cls: "bg-teal-100 text-teal-800" };
+  if (percent >= mins.good) return { label: "جيد", cls: "bg-blue-100 text-blue-800" };
+  if (percent >= mins.pass) return { label: "مقبول", cls: "bg-amber-100 text-amber-800" };
   return { label: "ضعيف", cls: "bg-red-100 text-red-700" };
 }
 
@@ -37,6 +40,7 @@ export default function GradesPage() {
   const [subjectId, setSubjectId] = useState<string>("");
   const [semester, setSemester] = useState<string>("1");
   const [period, setPeriod] = useState<string>("1");
+  const [bands, setBands] = useState<BandMins>(DEFAULT_BANDS);
   const [notLinked, setNotLinked] = useState(false);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
@@ -86,6 +90,7 @@ export default function GradesPage() {
       setStudents(d.students);
       setSubject(d.subject);
       setComponents(d.components.filter((c: Component) => c.is_active));
+      if (d.bands) setBands(d.bands);
       const vals: Record<number, Record<number, string>> = {};
       for (const s of d.students) {
         vals[s.id] = {};
@@ -411,7 +416,7 @@ export default function GradesPage() {
                   const t = totals.get(s.id);
                   const total = t?.total ?? 0;
                   const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-                  const b = band(pct);
+                  const b = band(pct, bands);
                   const failing = t && t.filled > 0 && total < passScore;
                   return (
                     <tr key={s.id} className={`transition-colors hover:bg-[#fbfdf9] ${highlightFailing && failing ? "bg-red-50/60" : idx % 2 ? "bg-[#fcfdfb]" : ""}`}>

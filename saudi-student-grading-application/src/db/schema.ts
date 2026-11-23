@@ -29,6 +29,11 @@ export const teachers = pgTable("teachers", {
   academicYear: text("academic_year").notNull().default("1447هـ"),
   semester: text("semester").notNull().default("الفصل الدراسي الأول"),
   stage: text("stage").notNull().default("متوسط"),
+  // عتبات التقدير (النسبة المئوية الدنيا لكل تقدير)
+  bandExcellentMin: integer("band_excellent_min").notNull().default(90),
+  bandVeryGoodMin: integer("band_very_good_min").notNull().default(80),
+  bandGoodMin: integer("band_good_min").notNull().default(70),
+  bandPassMin: integer("band_pass_min").notNull().default(60),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

@@ -108,6 +108,12 @@ ALTER TABLE grades ADD COLUMN IF NOT EXISTS period SMALLINT NOT NULL DEFAULT 1;
 DROP INDEX IF EXISTS uq_grade_student_component;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_grade_student_component_sem_per ON grades(student_id, component_id, semester, period);
 
+-- عتبات التقدير القابلة للتعديل من الإعدادات (90/80/70/60 افتراضياً)
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_excellent_min SMALLINT NOT NULL DEFAULT 90;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_very_good_min SMALLINT NOT NULL DEFAULT 80;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_good_min SMALLINT NOT NULL DEFAULT 70;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_pass_min SMALLINT NOT NULL DEFAULT 60;
+
 -- جدول الربط القديم (نحتفظ به للرجوع، ولا يُستخدم)
 CREATE TABLE IF NOT EXISTS subject_grade_links (
   id SERIAL PRIMARY KEY,

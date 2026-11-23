@@ -138,12 +138,31 @@ html, body {
 .ministry-head p, .ministry-head small { font-size: .72rem; color: #222; }
 .doc-title {
   text-align: center; font-weight: 900; font-size: 1.05rem;
-  border-top: 2.5px solid var(--green-800); border-bottom: 2.5px solid var(--green-800);
-  padding: .3rem 0; margin: .6rem 0 .7rem; color: var(--green-900); letter-spacing: .02em;
+  border-top: 2.5px solid var(--green-800);
+  border-bottom: 3px double var(--gold);
+  padding: .32rem 0 .28rem; margin: .6rem 0 .7rem; color: var(--green-900); letter-spacing: .02em;
 }
+/* ===== جدول التقارير — لوحة ألوان رسمية متقنة ===== */
 .sheet-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
-.sheet-table th, .sheet-table td { border: 1px solid #33413a; padding: .28rem .3rem; text-align: center; }
-.sheet-table thead th { background: #eef3ee; font-weight: 800; }
+.sheet-table th, .sheet-table td { border: 1px solid #b9c9c0; padding: .28rem .3rem; text-align: center; }
+/* ترويسة رئيسية خضراء متدرجة بحدود ذهبية */
+.sheet-table thead th {
+  background: linear-gradient(160deg, #0e5c3a 0%, #0a4630 100%);
+  color: #fff; font-weight: 800; border-color: #0a4630;
+}
+.sheet-table thead tr:first-child th { border-bottom: 2px solid var(--gold); }
+/* ألوان مجموعات الأعمدة */
+.sheet-table thead .grp-perf   { background: linear-gradient(160deg,#0f766e,#0b5449); }
+.sheet-table thead .grp-written{ background: linear-gradient(160deg,#3730a3,#2a2580); }
+.sheet-table thead .grp-year   { background: linear-gradient(160deg,#8a6a1f,#6f5417); }
+.sheet-table thead .grp-sum    { background: linear-gradient(160deg,#0a4630,#062e1f); }
+/* صفوف متعرجة (زبرا) بلون أخضر فاتح */
+.sheet-table tbody tr:nth-child(even) td { background: #f2f7f3; }
+.sheet-table tbody tr:hover td { background: #e9f2ec; }
+/* تذييل ذهبي */
+.sheet-table tfoot th, .sheet-table tfoot td { background: #f7efd9; color: #5c4a12; font-weight: 800; border-top: 2px solid var(--gold); }
+/* شريحة التقدير الملوّنة */
+.band-chip { display: inline-block; min-width: 3.2em; padding: .08rem .5rem; border-radius: 999px; font-weight: 800; }
 .sign-row { display: flex; justify-content: space-between; gap: 2rem; margin-top: 1.1rem; font-size: .78rem; }
 .sign-box { text-align: center; min-width: 180px; }
 .sign-line { border-bottom: 1.5px solid #111; height: 2.2rem; margin-bottom: .2rem; }
@@ -184,6 +203,10 @@ html, body {
   .sheet-table th, .sheet-table td { padding: .1rem .22rem; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
   .sheet-table thead th { padding: .16rem .22rem; }
   .sheet-table .nid { direction: ltr; font-variant-numeric: tabular-nums; word-break: break-all; text-align: center; }
+  /* ألوان واضحة وثابتة في الطباعة */
+  .print-sheet, .sheet-table, .sheet-table * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .sheet-table thead th { color: #fff; }
+  .band-chip { min-width: 2.6em; padding: .05rem .4rem; }
 
   /* صف التوقيع مضغوط ويتبقى مع تذييل الجدول */
   .sign-row { margin-top: .5rem; font-size: .66rem; }

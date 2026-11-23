@@ -18,10 +18,38 @@ export const GRADE_BANDS: GradeBand[] = [
   { label: "ضعيف", min: 0, color: "#b91c1c", bg: "#fee2e2", text: "#991b1b" },
 ];
 
-/** التقدير حسب النسبة المئوية من العظمى */
+/** التقدير حسب النسبة المئوية من العظمى (العتبات الافتراضية) */
 export function gradeBand(percent: number): GradeBand {
   for (const b of GRADE_BANDS) if (percent >= b.min) return b;
   return GRADE_BANDS[GRADE_BANDS.length - 1];
+}
+
+// ===== العتبات المخصصة لكل معلم (قابلة للتعديل من الإعدادات) =====
+export type BandMins = {
+  excellent: number; // ممتاز ≥
+  veryGood: number;  // جيد جداً ≥
+  good: number;      // جيد ≥
+  pass: number;      // مقبول ≥ (أقلها = ضعيف)
+};
+
+export const DEFAULT_BAND_MINS: BandMins = { excellent: 90, veryGood: 80, good: 70, pass: 60 };
+
+/** بناء مصفوفة التقديرات من عتبات المعلم (الألوان ثابتة، والحدود قابلة للتعديل) */
+export function buildBands(m: BandMins): GradeBand[] {
+  return [
+    { label: "ممتاز", min: m.excellent, color: "#047857", bg: "#d1fae5", text: "#065f46" },
+    { label: "جيد جداً", min: m.veryGood, color: "#0f766e", bg: "#ccfbf1", text: "#115e59" },
+    { label: "جيد", min: m.good, color: "#1d4ed8", bg: "#dbeafe", text: "#1e40af" },
+    { label: "مقبول", min: m.pass, color: "#b45309", bg: "#fef3c7", text: "#92400e" },
+    { label: "ضعيف", min: 0, color: "#b91c1c", bg: "#fee2e2", text: "#991b1b" },
+  ];
+}
+
+/** التقدير حسب النسبة وعتبات معلم معيّنة */
+export function bandFor(percent: number, m: BandMins): GradeBand {
+  const bands = buildBands(m);
+  for (const b of bands) if (percent >= b.min) return b;
+  return bands[bands.length - 1];
 }
 
 /** التقدير بلفظ اللائحة (+ امتياز/لم يجتز إن رغبت الوزارة) */

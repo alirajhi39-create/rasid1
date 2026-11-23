@@ -17,7 +17,10 @@ type SubjectInfo = { id: number; name: string; max_total: string | number; pass_
 type TeacherInfo = {
   full_name: string; school_name: string; education_admin: string; education_office: string;
   city: string; principal_name: string; academic_year: string; semester: string; job_title: string;
+  band_excellent_min?: number; band_very_good_min?: number; band_good_min?: number; band_pass_min?: number;
 };
+type BandMins = { excellent: number; veryGood: number; good: number; pass: number };
+const DEFAULT_BANDS: BandMins = { excellent: 90, veryGood: 80, good: 70, pass: 60 };
 type YearRow = {
   s: StudentRow; s1p1: number; s1p2: number; s2p1: number; s2p2: number;
   sem1: number; sem2: number; yearTotal: number; avg: number; percent: number;
@@ -28,12 +31,12 @@ type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1";
 const SEMESTERS: Record<string, string> = { "1": "الفصل الدراسي الأول", "2": "الفصل الدراسي الثاني" };
 const PERIODS: Record<string, string> = { "1": "الفترة الأولى", "2": "الفترة الثانية" };
 
-function band(pct: number) {
-  if (pct >= 90) return { label: "ممتاز", comment: "أداء متميز — نرجو المحافظة على التفوق" };
-  if (pct >= 80) return { label: "جيد جداً", comment: "أداء مميز — بخطوات قليلة يصل للامتياز" };
-  if (pct >= 70) return { label: "جيد", comment: "مستوى جيد — يحتاج مزيداً من التركيز في المذاكرة" };
-  if (pct >= 60) return { label: "مقبول", comment: "مقبول — يُنصح بمراجعة الدروس أولاً بأول" };
-  return { label: "ضعيف", comment: "يحتاج خطة علاجية ومتابعة منزلية عاجلة" };
+function band(pct: number, mins: BandMins = DEFAULT_BANDS) {
+  if (pct >= mins.excellent) return { label: "ممتاز", comment: "أداء متميز — نرجو المحافظة على التفوق", color: "#047857", bg: "#d1fae5", text: "#065f46" };
+  if (pct >= mins.veryGood) return { label: "جيد جداً", comment: "أداء مميز — بخطوات قليلة يصل للامتياز", color: "#0f766e", bg: "#ccfbf1", text: "#115e59" };
+  if (pct >= mins.good) return { label: "جيد", comment: "مستوى جيد — يحتاج مزيداً من التركيز في المذاكرة", color: "#1d4ed8", bg: "#dbeafe", text: "#1e40af" };
+  if (pct >= mins.pass) return { label: "مقبول", comment: "مقبول — يُنصح بمراجعة الدروس أولاً بأول", color: "#b45309", bg: "#fef3c7", text: "#92400e" };
+  return { label: "ضعيف", comment: "يحتاج خطة علاجية ومتابعة منزلية عاجلة", color: "#b91c1c", bg: "#fee2e2", text: "#991b1b" };
 }
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -64,6 +67,16 @@ function ReportsInner() {
     () => subjects.filter((s) => !classId || (s.class_ids ?? []).map(Number).includes(Number(classId))),
     [subjects, classId]
   );
+
+  // عتبات التقدير المخصصة للمعلم (من الإعدادات)
+  const bands: BandMins = teacher
+    ? {
+        excellent: Number(teacher.band_excellent_min ?? 90),
+        veryGood: Number(teacher.band_very_good_min ?? 80),
+        good: Number(teacher.band_good_min ?? 70),
+        pass: Number(teacher.band_pass_min ?? 60),
+      }
+    : DEFAULT_BANDS;
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => d.ok && setTeacher(d.teacher));
@@ -130,8 +143,9 @@ function ReportsInner() {
     const total = perComp.reduce<number>((a, v) => a + (v ?? 0), 0);
     const filled = perComp.filter((v) => v !== null).length;
     const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-    return { s, perComp, total, filled, pct, band: band(pct) };
-  }), [students, components, grades, maxTotal]);
+    return { s, perComp, total, filled, pct, band: band(pct, bands) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [students, components, grades, maxTotal, teacher]);
 
   // مجاميع المجموعتين لكل طالب (للطباعة: الإجماليات فقط دون البنود)
   const perfMax = components.filter((c) => c.category === "performance").reduce((a, c) => a + Number(c.max_score), 0);
@@ -381,30 +395,32 @@ function ReportsInner() {
                     <th rowSpan={2}>توقيع ولي<br />الأمر</th>
                   </tr>
                   <tr>
-                    <th>المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(perfMax)}</span></th>
-                    <th>التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(writtenMax)}</span></th>
+                    <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
+                    <th className="grp-written">التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {grouped.map((r, i) => (
-                    <tr key={r.s.id} style={r.filled > 0 && r.total < passScore ? { background: "#fdf1f1" } : undefined}>
+                    <tr key={r.s.id} style={r.filled > 0 && r.total < passScore ? { background: "#fdecec" } : undefined}>
                       <td>{i + 1}</td>
                       {!hideNid && <td dir="ltr" className="nid">{r.s.national_id || "—"}</td>}
                       <td style={{ textAlign: "right", fontWeight: 700 }}>{r.s.full_name}</td>
-                      <td style={{ fontWeight: 700 }}>{r.perfFilled > 0 ? fmt(r.perf) : ""}</td>
-                      <td style={{ fontWeight: 700 }}>{r.writtenFilled > 0 ? fmt(r.written) : ""}</td>
-                      <td style={{ fontWeight: 800 }}>{r.filled > 0 ? fmt(r.total) : ""}</td>
+                      <td style={{ fontWeight: 700, color: "#0b5449" }}>{r.perfFilled > 0 ? fmt(r.perf) : ""}</td>
+                      <td style={{ fontWeight: 700, color: "#2a2580" }}>{r.writtenFilled > 0 ? fmt(r.written) : ""}</td>
+                      <td style={{ fontWeight: 800, color: "#0a4630" }}>{r.filled > 0 ? fmt(r.total) : ""}</td>
                       <td>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : ""}</td>
-                      <td style={{ fontWeight: 800 }}>{r.filled > 0 ? r.band.label : ""}</td>
+                      <td>{r.filled > 0 ? (
+                        <span className="band-chip" style={{ background: r.band.bg, color: r.band.text }}>{r.band.label}</span>
+                      ) : ""}</td>
                       <td style={{ minWidth: 70 }}></td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                  <tr>
                     <td colSpan={hideNid ? 2 : 3}>المتوسط العام للفصل / عدد الناجحين</td>
-                    <td>{grouped.some((r) => r.perfFilled > 0) ? groupedStats.perfAvg.toFixed(1) : "—"}</td>
-                    <td>{grouped.some((r) => r.writtenFilled > 0) ? groupedStats.writtenAvg.toFixed(1) : "—"}</td>
+                    <td style={{ color: "#0b5449" }}>{grouped.some((r) => r.perfFilled > 0) ? groupedStats.perfAvg.toFixed(1) : "—"}</td>
+                    <td style={{ color: "#2a2580" }}>{grouped.some((r) => r.writtenFilled > 0) ? groupedStats.writtenAvg.toFixed(1) : "—"}</td>
                     <td colSpan={2}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</td>
                     <td colSpan={2}>{gradedCount > 0 ? `${passCount} / ${gradedCount}` : "—"}</td>
                   </tr>
@@ -436,19 +452,21 @@ function ReportsInner() {
                   <table className="sheet-table">
                     <thead>
                       <tr>
-                        <th>المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(perfMax)}</span></th>
-                        <th>التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem" }}>من {fmt(writtenMax)}</span></th>
-                        <th>المجموع<br />{fmt(maxTotal)}</th>
+                        <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
+                        <th className="grp-written">التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
+                        <th className="grp-sum">المجموع<br />{fmt(maxTotal)}</th>
                         <th>النسبة</th><th>التقدير</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.perfFilled > 0 ? fmt(r.perf) : "—"}</td>
-                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.writtenFilled > 0 ? fmt(r.written) : "—"}</td>
-                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.filled > 0 ? fmt(r.total) : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem", color: "#0b5449" }}>{r.perfFilled > 0 ? fmt(r.perf) : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem", color: "#2a2580" }}>{r.writtenFilled > 0 ? fmt(r.written) : "—"}</td>
+                        <td style={{ fontWeight: 800, fontSize: "1rem", color: "#0a4630" }}>{r.filled > 0 ? fmt(r.total) : "—"}</td>
                         <td style={{ fontSize: "1rem" }}>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : "—"}</td>
-                        <td style={{ fontWeight: 800, fontSize: "1rem" }}>{r.filled > 0 ? r.band.label : "—"}</td>
+                        <td>{r.filled > 0 ? (
+                          <span className="band-chip" style={{ background: r.band.bg, color: r.band.text, fontSize: "0.85rem" }}>{r.band.label}</span>
+                        ) : "—"}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -472,13 +490,15 @@ function ReportsInner() {
                 </thead>
                 <tbody>
                   {([
-                    { label: "المهام الأدائية", max: perfMax, avg: groupedStats.perfAvg, top: groupedStats.perfTop, low: groupedStats.perfLow, mastery: groupedStats.perfMastery, any: grouped.some((r) => r.perfFilled > 0) },
-                    { label: "التقويمات التحريرية", max: writtenMax, avg: groupedStats.writtenAvg, top: groupedStats.writtenTop, low: groupedStats.writtenLow, mastery: groupedStats.writtenMastery, any: grouped.some((r) => r.writtenFilled > 0) },
+                    { label: "المهام الأدائية", max: perfMax, avg: groupedStats.perfAvg, top: groupedStats.perfTop, low: groupedStats.perfLow, mastery: groupedStats.perfMastery, any: grouped.some((r) => r.perfFilled > 0), dot: "#0f766e", bg: "#ccfbf1" },
+                    { label: "التقويمات التحريرية", max: writtenMax, avg: groupedStats.writtenAvg, top: groupedStats.writtenTop, low: groupedStats.writtenLow, mastery: groupedStats.writtenMastery, any: grouped.some((r) => r.writtenFilled > 0), dot: "#3730a3", bg: "#e0e7ff" },
                   ]).map((row) => (
                     <tr key={row.label}>
-                      <td style={{ textAlign: "right", fontWeight: 800 }}>{row.label}</td>
+                      <td style={{ textAlign: "right", fontWeight: 800 }}>
+                        <span className="band-chip" style={{ background: row.bg, color: row.dot }}>{row.label}</span>
+                      </td>
                       <td>{fmt(row.max)}</td>
-                      <td>{row.any ? row.avg.toFixed(2) : "—"}</td>
+                      <td style={{ fontWeight: 800 }}>{row.any ? row.avg.toFixed(2) : "—"}</td>
                       <td>{row.any ? fmt(row.top) : "—"}</td>
                       <td>{row.any ? fmt(row.low) : "—"}</td>
                       <td>{row.any ? `${row.mastery.toFixed(0)}%` : "—"}</td>
@@ -486,7 +506,7 @@ function ReportsInner() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                  <tr>
                     <td style={{ textAlign: "right" }}>الإجمالي</td>
                     <td>{fmt(maxTotal)}</td>
                     <td>{gradedCount > 0 ? (rows.reduce((a, r) => a + r.total, 0) / gradedCount).toFixed(2) : "—"}</td>
@@ -498,14 +518,14 @@ function ReportsInner() {
               </table>
               <div className="mt-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                 {[
-                  ["عدد الطلاب", String(students.length)],
-                  ["تم رصدهم", String(gradedCount)],
-                  ["الناجحون", `${passCount} (${gradedCount ? Math.round((passCount / gradedCount) * 100) : 0}%)`],
-                  ["المتوسط العام", `${classAvg.toFixed(1)}%`],
-                ].map(([k, v]) => (
-                  <div key={k} className="rounded-xl border border-[#dfe3da] bg-[#fbfbf8] p-3">
-                    <div className="text-xl font-black text-[#0a4630]">{v}</div>
-                    <div className="text-[0.6rem] font-bold text-[#7a857d]">{k}</div>
+                  ["عدد الطلاب", String(students.length), "#0a4630", "#eef3ee"],
+                  ["تم رصدهم", String(gradedCount), "#0b5449", "#ccfbf1"],
+                  ["الناجحون", `${passCount} (${gradedCount ? Math.round((passCount / gradedCount) * 100) : 0}%)`, "#047857", "#d1fae5"],
+                  ["المتوسط العام", `${classAvg.toFixed(1)}%`, "#8a6a1f", "#f7efd9"],
+                ].map(([k, v, fg, bg]) => (
+                  <div key={k} className="rounded-xl border border-[#dfe3da] p-3" style={{ background: bg as string }}>
+                    <div className="text-xl font-black" style={{ color: fg as string }}>{v}</div>
+                    <div className="text-[0.6rem] font-bold text-[#5c6f65]">{k}</div>
                   </div>
                 ))}
               </div>
@@ -534,9 +554,9 @@ function ReportsInner() {
                     <th rowSpan={2}>م</th>
                     {!hideNid && <th rowSpan={2}>رقم السجل<br />المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
-                    <th colSpan={4}>الفصل الدراسي الأول</th>
-                    <th rowSpan={2}>النسبة</th>
-                    <th rowSpan={2}>التقدير</th>
+                    <th colSpan={4} className="grp-perf">الفصل الدراسي الأول</th>
+                    <th rowSpan={2} className="grp-sum">النسبة</th>
+                    <th rowSpan={2} className="grp-sum">التقدير</th>
                   </tr>
                   <tr>
                     <th>الفترة الأولى<br /><span style={{ fontWeight: 600, fontSize: "0.58rem" }}>({fmt(yearPeriodMax)})</span></th>
@@ -547,7 +567,7 @@ function ReportsInner() {
                 </thead>
                 <tbody>
                   {sem1Rows.map((r, i) => {
-                    const b = band(r.semPct);
+                    const b = band(r.semPct, bands);
                     const failing = r.sem1 > 0 && r.semAvg < passScore;
                     return (
                       <tr key={r.s.id} style={failing ? { background: "#fdf1f1" } : undefined}>
@@ -559,7 +579,9 @@ function ReportsInner() {
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.sem1 > 0 ? fmt(r.sem1) : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3", color: "#0e5c3a" }}>{r.sem1 > 0 ? fmt(r.semAvg) : ""}</td>
                         <td style={{ background: "#f6f8f3" }}>{r.sem1 > 0 ? `${r.semPct.toFixed(1)}%` : ""}</td>
-                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.sem1 > 0 ? b.label : ""}</td>
+                        <td style={{ background: "#f6f8f3" }}>{r.sem1 > 0 ? (
+                          <span className="band-chip" style={{ background: b.bg, color: b.text }}>{b.label}</span>
+                        ) : ""}</td>
                       </tr>
                     );
                   })}
@@ -568,7 +590,7 @@ function ReportsInner() {
                   )}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                  <tr>
                     <td colSpan={hideNid ? 2 : 3}>المتوسط / عدد الناجحين</td>
                     <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p1, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
                     <td>{sem1Rows.length ? (sem1Rows.reduce((a, r) => a + r.s1p2, 0) / sem1Rows.length).toFixed(1) : "—"}</td>
@@ -604,9 +626,9 @@ function ReportsInner() {
                     <th rowSpan={2}>م</th>
                     {!hideNid && <th rowSpan={2}>رقم السجل المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
-                    <th colSpan={4}>الفصل الدراسي الأول</th>
-                    <th colSpan={4}>الفصل الدراسي الثاني</th>
-                    <th colSpan={5}>محصلة العام</th>
+                    <th colSpan={4} className="grp-perf">الفصل الدراسي الأول</th>
+                    <th colSpan={4} className="grp-written">الفصل الدراسي الثاني</th>
+                    <th colSpan={5} className="grp-year">محصلة العام</th>
                   </tr>
                   <tr>
                     <th>الفترة الأولى<br />({fmt(yearPeriodMax)})</th>
@@ -626,7 +648,7 @@ function ReportsInner() {
                 </thead>
                 <tbody>
                   {yearRows.map((r, i) => {
-                    const b = band(r.percent);
+                    const b = band(r.percent, bands);
                     const failing = r.yearTotal > 0 && r.avg < passScore;
                     const sem1Avg = r.sem1 / 2;
                     const sem2Avg = r.sem2 / 2;
@@ -647,8 +669,10 @@ function ReportsInner() {
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.yearTotal) : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3", color: "#0e5c3a" }}>{r.yearTotal > 0 ? fmt(yearAvgSem) : ""}</td>
                         <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? fmt(r.avg) : ""}</td>
-                        <td style={{ background: "#f6f8f3" }}>{r.yearTotal > 0 ? `${r.percent.toFixed(1)}%` : ""}</td>
-                        <td style={{ fontWeight: 800, background: "#f6f8f3" }}>{r.yearTotal > 0 ? b.label : ""}</td>
+                        <td style={{ background: "#fbf7ea" }}>{r.yearTotal > 0 ? `${r.percent.toFixed(1)}%` : ""}</td>
+                        <td style={{ background: "#fbf7ea" }}>{r.yearTotal > 0 ? (
+                          <span className="band-chip" style={{ background: b.bg, color: b.text }}>{b.label}</span>
+                        ) : ""}</td>
                       </tr>
                     );
                   })}
@@ -657,7 +681,7 @@ function ReportsInner() {
                   )}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: "#eef3ee", fontWeight: 800 }}>
+                  <tr>
                     <td colSpan={hideNid ? 2 : 3}>المتوسط / عدد الناجحين</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p1, 0) / yearRows.length).toFixed(1) : "—"}</td>
                     <td>{yearRows.length ? (yearRows.reduce((a, r) => a + r.s1p2, 0) / yearRows.length).toFixed(1) : "—"}</td>

@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: "هذه المادة غير مرتبطة بهذا الفصل — اربطها من صفحة المواد والتوزيع", notLinked: true }, { status: 400 });
   }
 
-  const [students, subject, components] = await Promise.all([
+  const [students, subject, components, bandsRow] = await Promise.all([
     db.execute(sql`
       SELECT id, full_name, national_id FROM students
       WHERE class_id = ${classId} ORDER BY full_name ASC
@@ -55,6 +55,10 @@ export async function GET(req: Request) {
       SELECT id, name, category, max_score::float AS max_score, weight_label, is_active, sort_order
       FROM grade_components WHERE subject_id = ${subjectId}
       ORDER BY sort_order ASC, id ASC
+    `),
+    db.execute(sql`
+      SELECT band_excellent_min, band_very_good_min, band_good_min, band_pass_min
+      FROM teachers WHERE id = ${session.sub} LIMIT 1
     `),
   ]);
 
@@ -78,6 +82,7 @@ export async function GET(req: Request) {
       row.value === null ? null : Number(row.value);
   }
 
+  const br = (bandsRow.rows[0] ?? {}) as Record<string, number>;
   return Response.json({
     ok: true,
     semester,
@@ -86,6 +91,12 @@ export async function GET(req: Request) {
     subject: subject.rows[0] ?? null,
     components: components.rows,
     grades: gradesMap,
+    bands: {
+      excellent: Number(br.band_excellent_min ?? 90),
+      veryGood: Number(br.band_very_good_min ?? 80),
+      good: Number(br.band_good_min ?? 70),
+      pass: Number(br.band_pass_min ?? 60),
+    },
   });
 }
 

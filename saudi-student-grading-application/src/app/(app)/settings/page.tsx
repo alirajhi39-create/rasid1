@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Settings, School, Save, KeyRound, Database, Loader2, CheckCircle2, ShieldCheck,
-  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload,
+  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload, Gauge,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -30,10 +30,20 @@ export default function SettingsPage() {
   const [initReport, setInitReport] = useState<string>("");
   const [backupStatus, setBackupStatus] = useState<{ last: string | null; count: number } | null>(null);
   const [busyBackup, setBusyBackup] = useState<"" | "export" | "auto" | "restore">("");
+  const [bandForm, setBandForm] = useState({ excellent: 90, veryGood: 80, good: 70, pass: 60 });
+  const [bandBusy, setBandBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => {
-      if (d.ok && d.teacher) setForm({ ...EMPTY, ...d.teacher });
+      if (d.ok && d.teacher) {
+        setForm({ ...EMPTY, ...d.teacher });
+        setBandForm({
+          excellent: Number(d.teacher.band_excellent_min ?? 90),
+          veryGood: Number(d.teacher.band_very_good_min ?? 80),
+          good: Number(d.teacher.band_good_min ?? 70),
+          pass: Number(d.teacher.band_pass_min ?? 60),
+        });
+      }
       setLoading(false);
     });
     fetch("/api/health", { cache: "no-store" }).then((r) => r.json()).then((d) => setHealth(d.ok ? "ok" : "down")).catch(() => setHealth("down"));
@@ -90,6 +100,42 @@ export default function SettingsPage() {
     }
     setInitBusy(false);
   };
+
+  // ===== نسب التقدير =====
+  const saveBands = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { excellent, veryGood, good, pass } = bandForm;
+    if ([excellent, veryGood, good, pass].some((n) => !Number.isFinite(n) || n < 0 || n > 100)) {
+      toast("النسب يجب أن تكون بين 0 و 100", "error");
+      return;
+    }
+    if (!(excellent > veryGood && veryGood > good && good > pass)) {
+      toast("يجب أن تكون النسب متناقصة: ممتاز > جيد جداً > جيد > مقبول", "error");
+      return;
+    }
+    setBandBusy(true);
+    const r = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bandExcellent: excellent, bandVeryGood: veryGood, bandGood: good, bandPass: pass }),
+    });
+    const d = await r.json();
+    setBandBusy(false);
+    if (d.ok) toast("حُفظت نسب التقدير — ستنعكس على الرصد والتقارير فوراً");
+    else toast(d.error ?? "تعذر الحفظ", "error");
+  };
+
+  const bandField = (id: string, label: string, key: keyof typeof bandForm, accent: string) => (
+    <div>
+      <label className="label" htmlFor={id}>{label} <span className="text-[#8a968d]">≥</span></label>
+      <div className="relative">
+        <input id={id} type="number" min={0} max={100} className="input text-center font-black tabular-nums"
+          value={bandForm[key]} onChange={(e) => setBandForm((f) => ({ ...f, [key]: Number(e.target.value) }))} />
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[0.7rem] font-black text-[#8a968d]">%</span>
+      </div>
+      <span className="mt-1 inline-block h-1.5 w-full rounded-full" style={{ background: accent }} />
+    </div>
+  );
 
   // ===== النسخ الاحتياطي =====
   const loadBackupStatus = () =>
@@ -241,6 +287,26 @@ export default function SettingsPage() {
               {pwBusy ? <Loader2 size={17} className="animate-spin" /> : <ShieldCheck size={17} />} تحديث كلمة المرور
             </button>
           </div>
+        </form>
+
+        {/* ===== نسب التقدير ===== */}
+        <form onSubmit={saveBands} className="card p-5">
+          <h2 className="flex items-center gap-2 text-lg font-black text-[#0a4630]"><Gauge className="text-[#c9a24b]" /> نسب التقدير</h2>
+          <p className="mt-1 text-[0.7rem] leading-relaxed text-[#5c6f65]">
+            حدّد النسبة الدنيا لكل تقدير — تُطبَّق فوراً على شاشات الرصد وكل الكشوف المطبوعة.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {bandField("b-exc", "ممتاز", "excellent", "#047857")}
+            {bandField("b-vg", "جيد جداً", "veryGood", "#0f766e")}
+            {bandField("b-good", "جيد", "good", "#1d4ed8")}
+            {bandField("b-pass", "مقبول", "pass", "#b45309")}
+          </div>
+          <div className="mt-2 rounded-xl bg-[#fbfbf8] px-3 py-2 text-[0.62rem] font-bold text-[#8a968d]">
+            ما دون {bandForm.pass}% يُقيَّم «ضعيف» (باللون الأحمر). النسب يجب أن تكون متناقصة.
+          </div>
+          <button type="submit" disabled={bandBusy} className="btn btn-primary mt-3 w-full justify-center">
+            {bandBusy ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />} حفظ نسب التقدير
+          </button>
         </form>
 
         {/* ===== حسابات معلمين آخرين ===== */}

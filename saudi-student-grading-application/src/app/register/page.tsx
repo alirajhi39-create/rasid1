@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
+import HeroPanel from "@/components/HeroPanel";
 import {
   GraduationCap, UserRound, KeyRound, Eye, EyeOff, Loader2, UserPlus,
   ChevronDown, School, ShieldCheck, BookOpenCheck, Printer,
@@ -61,25 +61,20 @@ export default function RegisterPage() {
   return (
     <main className="relative flex min-h-screen overflow-hidden bg-[#062e1f]">
       {/* العمود البصري */}
-      <div className="relative hidden w-[42%] shrink-0 lg:block xl:w-[48%]">
-        <Image src="/images/login-hero.jpg" alt="فصل دراسي سعودي حديث" fill priority className="object-cover object-center" />
-        <div className="absolute inset-0 bg-gradient-to-l from-[#062e1f] via-[#062e1f3d] to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#062e1f] via-transparent to-transparent" />
-        <div className="absolute bottom-0 right-0 p-10 text-white">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#c9a24b]/50 bg-black/35 px-4 py-1.5 text-[0.72rem] font-extrabold text-[#e7cf9a] backdrop-blur-md">
-            <GraduationCap size={13} /> منصة المعلمين — فضاء مستقل لكل معلم
-          </div>
-          <h2 className="max-w-xl text-3xl font-black leading-[1.4] text-white drop-shadow-lg">
-            حسابك الخاص…<br />
-            <span className="text-[#e7cf9a]">مدرستك، فصولك، موادك — كلها لك وحدك</span>
-          </h2>
-          <ul className="mt-4 space-y-2 text-[0.78rem] font-semibold text-emerald-100/85">
-            <li className="flex items-center gap-2"><BookOpenCheck size={14} className="text-[#c9a24b]" /> مواد جاهزة بتوزيع لائحي (مهام أدائية 40 + تقويمات تحريرية 60)</li>
-            <li className="flex items-center gap-2"><Printer size={14} className="text-[#c9a24b]" /> كشوف مطبوعة بترويسة مدرستك ومديرها</li>
-            <li className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#c9a24b]" /> بياناتك لا يراها أي معلم آخر — تشفير كامل</li>
-          </ul>
+      <HeroPanel className="lg:block">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#c9a24b]/50 bg-black/35 px-4 py-1.5 text-[0.72rem] font-extrabold text-[#e7cf9a] backdrop-blur-md">
+          <GraduationCap size={13} /> منصة المعلمين — فضاء مستقل لكل معلم
         </div>
-      </div>
+        <h2 className="max-w-xl text-3xl font-black leading-[1.4] text-white drop-shadow-lg">
+          حسابك الخاص…<br />
+          <span className="text-[#e7cf9a]">مدرستك، فصولك، موادك — كلها لك وحدك</span>
+        </h2>
+        <ul className="mt-4 space-y-2 text-[0.78rem] font-semibold text-emerald-100/85">
+          <li className="flex items-center gap-2"><BookOpenCheck size={14} className="text-[#c9a24b]" /> مواد جاهزة بتوزيع لائحي (مهام أدائية 40 + تقويمات تحريرية 60)</li>
+          <li className="flex items-center gap-2"><Printer size={14} className="text-[#c9a24b]" /> كشوف مطبوعة بترويسة مدرستك ومديرها</li>
+          <li className="flex items-center gap-2"><ShieldCheck size={14} className="text-[#c9a24b]" /> بياناتك لا يراها أي معلم آخر — تشفير كامل</li>
+        </ul>
+      </HeroPanel>
 
       {/* نموذج التسجيل */}
       <div className="relative flex flex-1 items-center justify-center px-5 py-8 sm:px-10">
