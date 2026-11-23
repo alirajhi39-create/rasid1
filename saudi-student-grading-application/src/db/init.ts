@@ -113,6 +113,8 @@ ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_excellent_min SMALLINT NOT NU
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_very_good_min SMALLINT NOT NULL DEFAULT 80;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_good_min SMALLINT NOT NULL DEFAULT 70;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_pass_min SMALLINT NOT NULL DEFAULT 60;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS teacher_sig TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS principal_sig TEXT;
 
 -- جدول الربط القديم (نحتفظ به للرجوع، ولا يُستخدم)
 CREATE TABLE IF NOT EXISTS subject_grade_links (

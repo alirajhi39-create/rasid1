@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Settings, School, Save, KeyRound, Database, Loader2, CheckCircle2, ShieldCheck,
-  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload, Gauge,
+  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload, Gauge, Trash2, PenLine,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -32,6 +32,8 @@ export default function SettingsPage() {
   const [busyBackup, setBusyBackup] = useState<"" | "export" | "auto" | "restore">("");
   const [bandForm, setBandForm] = useState({ excellent: 90, veryGood: 80, good: 70, pass: 60 });
   const [bandBusy, setBandBusy] = useState(false);
+  const [sig, setSig] = useState<{ teacher: string | null; principal: string | null }>({ teacher: null, principal: null });
+  const [sigBusy, setSigBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => {
@@ -42,6 +44,10 @@ export default function SettingsPage() {
           veryGood: Number(d.teacher.band_very_good_min ?? 80),
           good: Number(d.teacher.band_good_min ?? 70),
           pass: Number(d.teacher.band_pass_min ?? 60),
+        });
+        setSig({
+          teacher: d.teacher.teacher_sig || null,
+          principal: d.teacher.principal_sig || null,
         });
       }
       setLoading(false);
@@ -134,6 +140,63 @@ export default function SettingsPage() {
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[0.7rem] font-black text-[#8a968d]">%</span>
       </div>
       <span className="mt-1 inline-block h-1.5 w-full rounded-full" style={{ background: accent }} />
+    </div>
+  );
+
+  // ===== التواقيع (صور) =====
+  const readImageFile = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      if (!file.type.startsWith("image/")) { reject(new Error("not-image")); return; }
+      if (file.size > 1_000_000) { reject(new Error("too-big")); return; }
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("read-fail"));
+      r.readAsDataURL(file);
+    });
+
+  const uploadSig = async (which: "teacher" | "principal", file: File) => {
+    try {
+      const dataUrl = await readImageFile(file);
+      setSig((s) => ({ ...s, [which]: dataUrl }));
+    } catch (e) {
+      toast(e instanceof Error && e.message === "too-big" ? "حجم الصورة كبير (الحد 1MB)" : "اختر ملف صورة صالح", "error");
+    }
+  };
+
+  const saveSig = async () => {
+    setSigBusy(true);
+    const r = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teacherSig: sig.teacher, principalSig: sig.principal }),
+    });
+    const d = await r.json();
+    setSigBusy(false);
+    if (d.ok) toast("حُفظت التواقيع — ستظهر في الكشوف المطبوعة");
+    else toast(d.error ?? "تعذر الحفظ", "error");
+  };
+
+  const sigBox = (which: "teacher" | "principal", title: string) => (
+    <div className="rounded-2xl border border-[#e6e7e0] bg-[#fbfbf8] p-3">
+      <div className="mb-2 text-[0.72rem] font-black text-[#0a4630]">{title}</div>
+      <div className="relative grid h-28 place-items-center overflow-hidden rounded-xl border-2 border-dashed border-[#cfd4cb] bg-white">
+        {sig[which] ? (
+          <img src={sig[which]!} alt={title} className="h-full w-full object-contain p-1" />
+        ) : (
+          <span className="text-[0.62rem] font-bold text-[#a3ada5]">لم يُرفع توقيع بعد</span>
+        )}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        <label className="btn btn-ghost flex-1 justify-center !py-1.5 text-[0.68rem]">
+          <Upload size={14} /> رفع صورة
+          <input type="file" accept="image/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSig(which, f); e.target.value = ""; }} />
+        </label>
+        {sig[which] && (
+          <button type="button" onClick={() => setSig((s) => ({ ...s, [which]: null }))}
+            className="btn btn-danger !px-2.5 !py-1.5 text-[0.68rem]"><Trash2 size={14} /></button>
+        )}
+      </div>
     </div>
   );
 
@@ -308,6 +371,21 @@ export default function SettingsPage() {
             {bandBusy ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />} حفظ نسب التقدير
           </button>
         </form>
+
+        {/* ===== التواقيع ===== */}
+        <div className="card p-5">
+          <h2 className="flex items-center gap-2 text-lg font-black text-[#0a4630]"><PenLine className="text-[#c9a24b]" /> تواقيع الكشوف</h2>
+          <p className="mt-1 text-[0.7rem] leading-relaxed text-[#5c6f65]">
+            ارفع صورة توقيعك وتوقيع مدير المدرسة لتظهر في أسفل الكشوف المطبوعة تلقائياً (PNG شفاف أو JPG).
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {sigBox("teacher", "توقيع المعلم")}
+            {sigBox("principal", "توقيع مدير المدرسة")}
+          </div>
+          <button onClick={saveSig} disabled={sigBusy} className="btn btn-primary mt-3 w-full justify-center">
+            {sigBusy ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />} حفظ التواقيع
+          </button>
+        </div>
 
         {/* ===== حسابات معلمين آخرين ===== */}
         <div className="card border-[#e3d9b8] bg-gradient-to-br from-[#fffdf2] to-white p-5">

@@ -34,6 +34,9 @@ export const teachers = pgTable("teachers", {
   bandVeryGoodMin: integer("band_very_good_min").notNull().default(80),
   bandGoodMin: integer("band_good_min").notNull().default(70),
   bandPassMin: integer("band_pass_min").notNull().default(60),
+  // صور التواقيع (data URL) للمعلم ومدير المدرسة
+  teacherSig: text("teacher_sig"),
+  principalSig: text("principal_sig"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { GraduationCap } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
- * العمود البصري لصفحتي الدخول والتسجيل — صورة بصرية مع بديل أنيق
- * (تدرج + زخرفة) في حال تعذر تحميل الصورة على أي استضافة.
+ * العمود البصري لصفحتي الدخول والتسجيل.
+ * يستخدم وسماً <img> مباشراً (بدون next/image) ليضمن ظهور الصورة على أي استضافة،
+ * مع بديل زخرفي أنيق في حال تعذر تحميلها.
  */
 export default function HeroPanel({
   children,
-  className = "lg:block",
+  className = "",
 }: {
   children: ReactNode;
   className?: string;
@@ -19,16 +19,13 @@ export default function HeroPanel({
   const [imgOk, setImgOk] = useState(true);
 
   return (
-    <div className={`relative hidden w-[46%] shrink-0 xl:w-[52%] ${className}`}>
+    <div className={`relative hidden lg:block w-[46%] shrink-0 xl:w-[52%] ${className}`}>
       {imgOk ? (
         <>
-          <Image
+          <img
             src="/images/login-hero.jpg"
             alt="فصل دراسي سعودي حديث"
-            fill
-            priority
-            sizes="(min-width: 1024px) 46vw"
-            className="object-cover object-center"
+            className="absolute inset-0 h-full w-full object-cover object-center"
             onError={() => setImgOk(false)}
           />
           <div className="absolute inset-0 bg-gradient-to-l from-[#062e1f] via-[#062e1f3d] to-transparent" />

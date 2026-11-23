@@ -12,7 +12,8 @@ export async function GET() {
   const rows = await db.execute(sql`
     SELECT id, username, full_name, job_title, school_name, education_admin, education_office,
            city, principal_name, academic_year, semester, stage,
-           band_excellent_min, band_very_good_min, band_good_min, band_pass_min
+           band_excellent_min, band_very_good_min, band_good_min, band_pass_min,
+           teacher_sig, principal_sig
     FROM teachers WHERE id = ${session.sub} LIMIT 1
   `);
   return Response.json({ ok: true, teacher: rows.rows[0] ?? null });
@@ -24,6 +25,24 @@ export async function PUT(req: Request) {
   await ensureInitialized();
   const b = await req.json().catch(() => ({}));
   const v = (k: string) => (b?.[k] !== undefined ? String(b[k]).trim() : null);
+
+  // التواقيع (data URL) — تُحفظ أو تُحذف (بإرسال null/فراغ)، وأسماء الأعمدة ثوابت والقيم مُربوطة
+  if (b?.teacherSig !== undefined || b?.principalSig !== undefined) {
+    const sigOk = (val: unknown) =>
+      val === null || val === "" ||
+      (typeof val === "string" && val.startsWith("data:image/") && val.length <= 1_500_000);
+    if (!sigOk(b.teacherSig) || !sigOk(b.principalSig)) {
+      return Response.json({ ok: false, error: "صيغة صورة التوقيع غير صالحة أو حجمها كبير" }, { status: 400 });
+    }
+    if (b.teacherSig !== undefined) {
+      const t = b.teacherSig === "" ? null : (b.teacherSig as string);
+      await db.execute(sql`UPDATE teachers SET teacher_sig = ${t} WHERE id = ${session.sub}`);
+    }
+    if (b.principalSig !== undefined) {
+      const p = b.principalSig === "" ? null : (b.principalSig as string);
+      await db.execute(sql`UPDATE teachers SET principal_sig = ${p} WHERE id = ${session.sub}`);
+    }
+  }
 
   // عتبات التقدير (إن وُجدت): تتحقق من الترتيب المنطقي وتُخزَّن
   const bands: Record<string, number> | null =

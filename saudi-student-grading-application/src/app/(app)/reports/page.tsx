@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, IdCard, Info,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -18,6 +18,7 @@ type TeacherInfo = {
   full_name: string; school_name: string; education_admin: string; education_office: string;
   city: string; principal_name: string; academic_year: string; semester: string; job_title: string;
   band_excellent_min?: number; band_very_good_min?: number; band_good_min?: number; band_pass_min?: number;
+  teacher_sig?: string | null; principal_sig?: string | null;
 };
 type BandMins = { excellent: number; veryGood: number; good: number; pass: number };
 const DEFAULT_BANDS: BandMins = { excellent: 90, veryGood: 80, good: 70, pass: 60 };
@@ -52,6 +53,9 @@ function ReportsInner() {
   const [tab, setTab] = useState<TabKey>("sheet");
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   const [hideNid, setHideNid] = useState(false);
+  const [hidePct, setHidePct] = useState(false);
+  const [hideBand, setHideBand] = useState(false);
+  const [hideSig, setHideSig] = useState(false);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [components, setComponents] = useState<Component[]>([]);
   const [subject, setSubject] = useState<SubjectInfo | null>(null);
@@ -293,10 +297,21 @@ function ReportsInner() {
                 <RectangleVertical size={16} /> عمودي
               </button>
             </div>
-            <label className="flex cursor-pointer select-none items-center gap-2 rounded-xl border border-[#e3e4dd] bg-white px-3 py-2 text-[0.7rem] font-extrabold text-[#3c4f44] hover:shadow-sm">
-              <input type="checkbox" className="accent-[#0e5c3a]" checked={hideNid} onChange={(e) => setHideNid(e.target.checked)} />
-              <IdCard size={14} /> إخفاء رقم السجل المدني في الطباعة
-            </label>
+            {/* اختيار أعمدة الطباعة */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-[#e3e4dd] bg-white px-3 py-1.5">
+              <span className="flex items-center gap-1 text-[0.68rem] font-black text-[#0a4630]"><Columns3 size={14} /> أعمدة الطباعة</span>
+              {[
+                { label: "السجل", checked: !hideNid, set: setHideNid },
+                { label: "النسبة", checked: !hidePct, set: setHidePct },
+                { label: "التقدير", checked: !hideBand, set: setHideBand },
+                { label: "التوقيع", checked: !hideSig, set: setHideSig },
+              ].map((c) => (
+                <label key={c.label} className="flex cursor-pointer select-none items-center gap-1 rounded-lg bg-[#f4f5f0] px-2 py-1 text-[0.66rem] font-extrabold text-[#3c4f44]">
+                  <input type="checkbox" className="accent-[#0e5c3a]" checked={c.checked} onChange={(e) => c.set(!e.target.checked)} />
+                  {c.label}
+                </label>
+              ))}
+            </div>
             <button onClick={exportNoor} disabled={exporting || loading} className="btn btn-gold">
               {exporting ? <Loader2 size={17} className="animate-spin" /> : <FileSpreadsheet size={17} />}
               تصدير Excel لنور
@@ -374,14 +389,14 @@ function ReportsInner() {
               <table className="sheet-table">
                 <colgroup>
                   <col style={{ width: "4%" }} />
-                  {!hideNid && <col style={{ width: "12%" }} />}
-                  <col style={{ width: hideNid ? "34%" : "26%" }} />
-                  <col style={{ width: "11%" }} />
-                  <col style={{ width: "11%" }} />
-                  <col style={{ width: "8%" }} />
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "8%" }} />
-                  <col style={{ width: "13%" }} />
+                  {!hideNid && <col style={{ width: "11%" }} />}
+                  <col style={{ width: "17%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "12.5%" }} />
+                  <col style={{ width: "9%" }} />
+                  {!hidePct && <col style={{ width: "7%" }} />}
+                  {!hideBand && <col style={{ width: "8%" }} />}
+                  {!hideSig && <col style={{ width: "12%" }} />}
                 </colgroup>
                 <thead>
                   <tr>
@@ -389,10 +404,10 @@ function ReportsInner() {
                     {!hideNid && <th rowSpan={2}>رقم السجل<br />المدني</th>}
                     <th rowSpan={2}>اسم الطالب</th>
                     <th colSpan={2}>توزيع الدرجات (الإجماليات)</th>
-                    <th rowSpan={2}>المجموع<br />{fmt(maxTotal)}</th>
-                    <th rowSpan={2}>النسبة</th>
-                    <th rowSpan={2}>التقدير</th>
-                    <th rowSpan={2}>توقيع ولي<br />الأمر</th>
+                    <th rowSpan={2} className="grp-sum">المجموع<br />{fmt(maxTotal)}</th>
+                    {!hidePct && <th rowSpan={2}>النسبة</th>}
+                    {!hideBand && <th rowSpan={2}>التقدير</th>}
+                    {!hideSig && <th rowSpan={2}>توقيع ولي<br />الأمر</th>}
                   </tr>
                   <tr>
                     <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
@@ -408,21 +423,23 @@ function ReportsInner() {
                       <td style={{ fontWeight: 700, color: "#0b5449" }}>{r.perfFilled > 0 ? fmt(r.perf) : ""}</td>
                       <td style={{ fontWeight: 700, color: "#2a2580" }}>{r.writtenFilled > 0 ? fmt(r.written) : ""}</td>
                       <td style={{ fontWeight: 800, color: "#0a4630" }}>{r.filled > 0 ? fmt(r.total) : ""}</td>
-                      <td>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : ""}</td>
-                      <td>{r.filled > 0 ? (
+                      {!hidePct && <td>{r.filled > 0 ? `${r.pct.toFixed(1)}%` : ""}</td>}
+                      {!hideBand && <td>{r.filled > 0 ? (
                         <span className="band-chip" style={{ background: r.band.bg, color: r.band.text }}>{r.band.label}</span>
-                      ) : ""}</td>
-                      <td style={{ minWidth: 70 }}></td>
+                      ) : ""}</td>}
+                      {!hideSig && <td style={{ minWidth: 60 }}></td>}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={hideNid ? 2 : 3}>المتوسط العام للفصل / عدد الناجحين</td>
+                    <td colSpan={2 + (hideNid ? 0 : 1)}>المتوسط العام للفصل / عدد الناجحين</td>
                     <td style={{ color: "#0b5449" }}>{grouped.some((r) => r.perfFilled > 0) ? groupedStats.perfAvg.toFixed(1) : "—"}</td>
                     <td style={{ color: "#2a2580" }}>{grouped.some((r) => r.writtenFilled > 0) ? groupedStats.writtenAvg.toFixed(1) : "—"}</td>
-                    <td colSpan={2}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</td>
-                    <td colSpan={2}>{gradedCount > 0 ? `${passCount} / ${gradedCount}` : "—"}</td>
+                    <td colSpan={1 + (hidePct ? 0 : 1) + (hideBand ? 0 : 1) + (hideSig ? 0 : 1)}>
+                      <span style={{ marginInlineEnd: "0.9em" }}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</span>
+                      <span style={{ opacity: 0.85 }}>{gradedCount > 0 ? `${passCount} / ${gradedCount} ناجح` : "—"}</span>
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -753,20 +770,29 @@ function SheetHeader({ teacher, subjectName, classLabel, today, docTitle, axisLa
   );
 }
 
+/** صندوق توقيع واحد — يعرض الصورة إن وُجدت، وإلا خط توقيع */
+function SignBox({ title, name, image }: { title: string; name: string; image?: string | null }) {
+  return (
+    <div className="sign-box">
+      <div style={{ fontWeight: 800, fontSize: "0.72rem" }}>{title}</div>
+      <div style={{ height: "2.4rem", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+        {image ? (
+          <img src={image} alt={title} style={{ maxHeight: "2.4rem", maxWidth: "8rem", objectFit: "contain" }} />
+        ) : (
+          <div className="sign-line" style={{ width: "100%" }} />
+        )}
+      </div>
+      <div style={{ fontSize: "0.72rem" }}>{name}</div>
+    </div>
+  );
+}
+
 /** صف التوقيعات — معلم المادة ومدير المدرسة فقط */
 function SignatureRow({ teacher }: { teacher: TeacherInfo | null }) {
   return (
     <div className="sign-row">
-      <div className="sign-box">
-        <div style={{ fontWeight: 800, fontSize: "0.72rem" }}>معلم المادة</div>
-        <div className="sign-line" />
-        <div style={{ fontSize: "0.72rem" }}>{teacher?.full_name}</div>
-      </div>
-      <div className="sign-box">
-        <div style={{ fontWeight: 800, fontSize: "0.72rem" }}>مدير المدرسة</div>
-        <div className="sign-line" />
-        <div style={{ fontSize: "0.72rem" }}>{teacher?.principal_name}</div>
-      </div>
+      <SignBox title="معلم المادة" name={teacher?.full_name ?? ""} image={teacher?.teacher_sig} />
+      <SignBox title="مدير المدرسة" name={teacher?.principal_name ?? ""} image={teacher?.principal_sig} />
     </div>
   );
 }
