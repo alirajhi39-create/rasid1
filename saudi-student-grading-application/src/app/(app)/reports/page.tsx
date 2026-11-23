@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, IdCard,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, IdCard, Info,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -238,6 +238,26 @@ function ReportsInner() {
     { key: "year", label: "ملخص الفصلين والعام", icon: Sigma },
   ];
 
+  /** طباعة مع حقن اتجاه @page ديناميكياً — الطريقة الموثوقة في Chrome/Edge */
+  const handlePrint = () => {
+    const RULE_ID = "rased-print-page-rule";
+    document.getElementById(RULE_ID)?.remove();
+    const style = document.createElement("style");
+    style.id = RULE_ID;
+    const orient = orientation === "portrait" ? "portrait" : "landscape";
+    const margin = orientation === "portrait" ? "12mm 16mm" : "10mm 15mm";
+    style.textContent = `@page { size: A4 ${orient} !important; margin: ${margin} !important; }`;
+    document.head.appendChild(style);
+    const cleanup = () => {
+      document.getElementById(RULE_ID)?.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    // احتياط: window.print() متزامن في Chrome ويطلق afterprint عند الإغلاق
+    window.setTimeout(cleanup, 1500);
+  };
+
   return (
     <div className="space-y-4">
       {/* ===== شريط التحكم (لا يُطبع) ===== */}
@@ -267,7 +287,7 @@ function ReportsInner() {
               {exporting ? <Loader2 size={17} className="animate-spin" /> : <FileSpreadsheet size={17} />}
               تصدير Excel لنور
             </button>
-            <button onClick={() => window.print()} className="btn btn-primary">
+            <button onClick={handlePrint} className="btn btn-primary">
               <Printer size={17} /> طباعة / PDF
             </button>
           </div>
@@ -312,6 +332,10 @@ function ReportsInner() {
             })}
           </div>
         </div>
+        <p className="flex items-center gap-1.5 text-[0.65rem] font-bold text-[#8a968d]">
+          <Info size={13} className="shrink-0" />
+          عند الطباعة اختر: ورق A4، والمهمش «الافتراضي» (لا تستخدم مهمشاً مخصصاً)، والتخطيط يتبع اتجاه الصفحة المحدد أعلاه — هذا يمنع اقتطاع أي جانب من الورقة.
+        </p>
         {linkedSubjects.length === 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-[0.72rem] font-bold text-amber-800">
             <AlertCircle size={15} /> لا توجد مواد مرتبطة بهذا الفصل — اربطها من «المواد والتوزيع» أو زر «ربط كل المواد» في صفحة الفصول.

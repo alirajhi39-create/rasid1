@@ -154,24 +154,20 @@ html, body {
 .page-break { break-after: page; page-break-after: always; }
 
 /* ============ الطباعة — أفقي افتراضياً مع إمكانية التبديل للعمودي ============ */
-@page landscape-page { size: A4 landscape; margin: 10mm 14mm; }
-@page portrait-page { size: A4 portrait; margin: 12mm 16mm; }
-@page { size: A4 landscape; margin: 10mm 14mm; }
-
-.print-sheet { page: landscape-page; }
-.print-sheet.portrait { page: portrait-page; }
+/* قاعدة @page واحدة عالمية (بدون صفحات مسماة — تجنّباً لأخطاء Chromium مع RTL)
+   اتجاه الطباعة يُحقن ديناميكياً من زر الطباعة عند الحاجة للعمودي */
+@page { size: A4 landscape; margin: 10mm 15mm; }
 
 @media print {
   html, body { background: #fff !important; width: auto !important; overflow: visible !important; }
   .app-chrome, .no-print { display: none !important; }
-  .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
   .print-sheet {
     border: none !important; box-shadow: none !important;
-    padding: 0 !important; margin: 0 auto !important; break-inside: auto;
-    width: 100% !important; max-width: 100% !important; overflow: visible;
-    page: landscape-page;
+    padding: 0 !important; margin: 0 !important; break-inside: auto;
+    width: 100% !important; max-width: 100% !important;
+    overflow: visible; box-sizing: border-box;
   }
-  .print-sheet.portrait { page: portrait-page; }
   .print-sheet.page-break { break-after: page; page-break-after: always; }
 
   /* ضغط الترويسة لتوفير مساحة رأس الصفحة + منع أي عنصر من تجاوز عرض الورقة */
