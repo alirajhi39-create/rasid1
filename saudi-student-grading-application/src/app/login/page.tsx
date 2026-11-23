@@ -154,6 +154,10 @@ function LoginInner() {
               </button>
             </form>
 
+            <div className="mt-3 text-center">
+              <Link href="/forgot-password" className="text-[0.72rem] font-extrabold text-[#e7cf9a] hover:underline">نسيت كلمة المرور؟</Link>
+            </div>
+
             {/* التسجيل لمعلم جديد */}
             <div className="mt-5 rounded-2xl border border-[#c9a24b]/25 bg-[#c9a24b]/8 p-3 text-center">
               <div className="flex items-center justify-center gap-2 text-[0.72rem] font-extrabold text-emerald-100/85">

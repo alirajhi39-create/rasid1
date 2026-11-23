@@ -180,6 +180,7 @@ html, body {
 @media print {
   html, body { background: #fff !important; width: auto !important; overflow: visible !important; }
   .app-chrome, .no-print { display: none !important; }
+  .no-print-col { width: 0 !important; }
   .app-main { padding: 0 !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
   .print-sheet {
     border: none !important; box-shadow: none !important;

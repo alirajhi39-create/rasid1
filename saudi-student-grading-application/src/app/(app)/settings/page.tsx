@@ -11,11 +11,13 @@ type TeacherForm = {
   full_name: string; job_title: string; school_name: string; education_admin: string;
   education_office: string; city: string; principal_name: string;
   academic_year: string; semester: string; stage: string; username?: string;
+  email: string;
 };
 
 const EMPTY: TeacherForm = {
   full_name: "", job_title: "", school_name: "", education_admin: "", education_office: "",
   city: "", principal_name: "", academic_year: "1447هـ", semester: "الفصل الدراسي الأول", stage: "متوسط",
+  email: "",
 };
 
 export default function SettingsPage() {
@@ -68,7 +70,7 @@ export default function SettingsPage() {
         fullName: form.full_name, jobTitle: form.job_title, schoolName: form.school_name,
         educationAdmin: form.education_admin, educationOffice: form.education_office, city: form.city,
         principalName: form.principal_name, academicYear: form.academic_year,
-        semester: form.semester, stage: form.stage,
+        semester: form.semester, stage: form.stage, email: form.email,
       }),
     });
     const d = await r.json();
@@ -291,6 +293,9 @@ export default function SettingsPage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {field("ft", "اسم المعلم", form.full_name, set("full_name"))}
           {field("jt", "المسمى الوظيفي", form.job_title, set("job_title"))}
+          <div className="sm:col-span-2">
+            {field("em", "البريد الإلكتروني (للاستخدام في استعادة كلمة المرور)", form.email, set("email"), "ltr")}
+          </div>
           <div className="sm:col-span-2">{field("sn", "اسم المدرسة", form.school_name, set("school_name"))}</div>
           {field("ea", "الإدارة العامة للتعليم", form.education_admin, set("education_admin"))}
           {field("eo", "مكتب التعليم", form.education_office, set("education_office"))}

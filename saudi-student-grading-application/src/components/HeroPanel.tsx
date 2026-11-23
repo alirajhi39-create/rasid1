@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import type { ReactNode } from "react";
+// الصورة مضمّنة داخل الحزمة البرمجية (تُصدر مع البناء دائماً) — لا تعتمد على مجلد public
+import heroUrl from "@/assets/hero.jpg";
 
 /**
  * العمود البصري لصفحتي الدخول والتسجيل.
@@ -23,7 +25,7 @@ export default function HeroPanel({
       {imgOk ? (
         <>
           <img
-            src="/images/login-hero.jpg"
+            src={heroUrl.src}
             alt="فصل دراسي سعودي حديث"
             className="absolute inset-0 h-full w-full object-cover object-center"
             onError={() => setImgOk(false)}

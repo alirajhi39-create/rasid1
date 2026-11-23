@@ -13,7 +13,7 @@ export async function GET() {
     SELECT id, username, full_name, job_title, school_name, education_admin, education_office,
            city, principal_name, academic_year, semester, stage,
            band_excellent_min, band_very_good_min, band_good_min, band_pass_min,
-           teacher_sig, principal_sig
+           teacher_sig, principal_sig, email
     FROM teachers WHERE id = ${session.sub} LIMIT 1
   `);
   return Response.json({ ok: true, teacher: rows.rows[0] ?? null });
@@ -86,5 +86,13 @@ export async function PUT(req: Request) {
       stage = COALESCE(${v("stage")}, stage)
     WHERE id = ${session.sub}
   `);
+  // البريد (يُقبل الحذف بإرسال فارغ)
+  if (b?.email !== undefined) {
+    const em = String(b.email).trim();
+    if (em !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+      return Response.json({ ok: false, error: "صيغة البريد الإلكتروني غير صحيحة" }, { status: 400 });
+    }
+    await db.execute(sql`UPDATE teachers SET email = ${em === "" ? null : em} WHERE id = ${session.sub}`);
+  }
   return Response.json({ ok: true });
 }

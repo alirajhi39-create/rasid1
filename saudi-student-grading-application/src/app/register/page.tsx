@@ -16,7 +16,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({
-    fullName: "", jobTitle: "", username: "", password: "", confirm: "",
+    fullName: "", jobTitle: "", username: "", password: "", confirm: "", email: "",
     schoolName: "", educationAdmin: "", educationOffice: "", city: "",
     principalName: "", academicYear: "1447هـ", semester: "الفصل الدراسي الأول", stage: "متوسط",
   });
@@ -38,6 +38,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           fullName: form.fullName, jobTitle: form.jobTitle || "معلم",
           username: form.username, password: form.password,
+          email: form.email || undefined,
           schoolName: form.schoolName || undefined,
           educationAdmin: form.educationAdmin || undefined,
           educationOffice: form.educationOffice || undefined,
@@ -115,6 +116,10 @@ export default function RegisterPage() {
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-[0.7rem] font-extrabold text-emerald-100/85" htmlFor="fullName">الاسم الرباعي للمعلم <span className="text-[#e7cf9a]">*</span></label>
                     <input id="fullName" required className={inputCls} placeholder="أ. محمد عبدالله الشمري" value={form.fullName} onChange={set("fullName")} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-[0.7rem] font-extrabold text-emerald-100/85" htmlFor="email">البريد الإلكتروني <span className="text-emerald-300/70">(اختياري — لاستعادة كلمة المرور)</span></label>
+                    <input id="email" type="email" className={inputCls} placeholder="teacher@school.edu.sa" value={form.email} onChange={set("email")} dir="ltr" style={{ textAlign: "left" }} />
                   </div>
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-[0.7rem] font-extrabold text-emerald-100/85" htmlFor="jobTitle">التخصص / المسمى الوظيفي</label>

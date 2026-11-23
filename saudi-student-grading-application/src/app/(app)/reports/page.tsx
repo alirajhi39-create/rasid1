@@ -5,14 +5,15 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
+import { buildWaMessage, openWhatsApp } from "@/lib/whatsapp";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 type SubjectItem = { id: number; name: string; color: string; is_active: boolean; class_ids?: number[] };
 type Component = { id: number; name: string; category: string; max_score: number; weight_label: string; is_active: boolean };
-type StudentRow = { id: number; full_name: string; national_id: string };
+type StudentRow = { id: number; full_name: string; national_id: string; guardian_phone?: string };
 type SubjectInfo = { id: number; name: string; max_total: string | number; pass_score: string | number; color: string };
 type TeacherInfo = {
   full_name: string; school_name: string; education_admin: string; education_office: string;
@@ -65,12 +66,34 @@ function ReportsInner() {
   const [teacher, setTeacher] = useState<TeacherInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
 
   // المواد الظاهرة = المرتبطة بهذا الفصل تحديداً
   const linkedSubjects = useMemo(
     () => subjects.filter((s) => !classId || (s.class_ids ?? []).map(Number).includes(Number(classId))),
     [subjects, classId]
   );
+
+  // إرسال نتيجة الطالب لولي الأمر عبر واتساب
+  const sendWa = (s: StudentRow, r: { perf: number; perfFilled: number; written: number; writtenFilled: number; total: number; filled: number; pct: number; bandLabel: string }) => {
+    const ok = openWhatsApp(s.guardian_phone ?? "", buildWaMessage({
+      studentName: s.full_name,
+      subject: subject?.name ?? "",
+      classLabel: classLabel,
+      axisLabel,
+      perf: r.perfFilled > 0 ? r.perf : null,
+      perfMax,
+      written: r.writtenFilled > 0 ? r.written : null,
+      writtenMax,
+      total: r.filled > 0 ? r.total : null,
+      totalMax: maxTotal,
+      pct: r.filled > 0 ? r.pct : null,
+      bandLabel: r.filled > 0 ? r.bandLabel : "—",
+      school: teacher?.school_name ?? "",
+      teacherName: teacher?.full_name ?? "",
+    }));
+    if (!ok) toast("لا يوجد رقم جوال مسجّل لولي أمر هذا الطالب", "error");
+  };
 
   // عتبات التقدير المخصصة للمعلم (من الإعدادات)
   const bands: BandMins = teacher
@@ -129,6 +152,15 @@ function ReportsInner() {
         if (d.ok) { setYearRows(d.rows); setYearPeriodMax(d.periodMax); }
       });
   }, [classId, subjectId, tab]);
+
+  // بيانات التحليل الشامل (لكل مادة وفصل)
+  useEffect(() => {
+    if (!subjectId || tab !== "analysis") { setAnalysis(null); return; }
+    fetch(`/api/analysis?subjectId=${subjectId}&semester=${semester}&period=${period}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setAnalysis(d); })
+      .catch(() => setAnalysis(null));
+  }, [subjectId, tab, semester, period]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const passScore = subject ? Number(subject.pass_score) : 50;
@@ -397,6 +429,7 @@ function ReportsInner() {
                   {!hidePct && <col style={{ width: "7%" }} />}
                   {!hideBand && <col style={{ width: "8%" }} />}
                   {!hideSig && <col style={{ width: "12%" }} />}
+                  <col className="no-print-col" style={{ width: "4%" }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -408,6 +441,7 @@ function ReportsInner() {
                     {!hidePct && <th rowSpan={2}>النسبة</th>}
                     {!hideBand && <th rowSpan={2}>التقدير</th>}
                     {!hideSig && <th rowSpan={2}>توقيع ولي<br />الأمر</th>}
+                    <th rowSpan={2} className="no-print" style={{ background: "#eef1ec", color: "#0e5c3a", width: "4%" }}>واتساب</th>
                   </tr>
                   <tr>
                     <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
@@ -428,6 +462,15 @@ function ReportsInner() {
                         <span className="band-chip" style={{ background: r.band.bg, color: r.band.text }}>{r.band.label}</span>
                       ) : ""}</td>}
                       {!hideSig && <td style={{ minWidth: 60 }}></td>}
+                      <td className="no-print" style={{ background: "#fbfdfb" }}>
+                        <button
+                          onClick={() => sendWa(r.s, { perf: r.perf, perfFilled: r.perfFilled, written: r.written, writtenFilled: r.writtenFilled, total: r.total, filled: r.filled, pct: r.pct, bandLabel: r.band.label })}
+                          title={`إرسال النتيجة لولي أمر ${r.s.full_name} عبر واتساب`}
+                          className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-[#25d366]/15 text-[#128c4b] transition hover:bg-[#25d366] hover:text-white"
+                        >
+                          <MessageCircle size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -440,6 +483,7 @@ function ReportsInner() {
                       <span style={{ marginInlineEnd: "0.9em" }}>{gradedCount > 0 ? `${classAvg.toFixed(1)}%` : "—"}</span>
                       <span style={{ opacity: 0.85 }}>{gradedCount > 0 ? `${passCount} / ${gradedCount} ناجح` : "—"}</span>
                     </td>
+                    <td className="no-print"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -490,6 +534,14 @@ function ReportsInner() {
                   <div className="mt-3 rounded-xl border border-dashed border-[#c9a24b] bg-[#fffdf2] p-3 text-[0.78rem] font-bold text-[#6b5518]">
                     <span className="text-[#a8843a]">تعليق المعلم: </span>{r.filled > 0 ? r.band.comment : "لم تُرصد درجاته بعد"}
                   </div>
+                  <div className="no-print mt-3">
+                    <button
+                      onClick={() => sendWa(r.s, { perf: r.perf, perfFilled: r.perfFilled, written: r.written, writtenFilled: r.writtenFilled, total: r.total, filled: r.filled, pct: r.pct, bandLabel: r.band.label })}
+                      className="btn !bg-[#25d366] !text-white w-full justify-center"
+                    >
+                      <MessageCircle size={17} /> إرسال النتيجة لولي الأمر عبر واتساب
+                    </button>
+                  </div>
                   <SignatureRow teacher={teacher} />
                 </div>
               ))}
@@ -500,52 +552,110 @@ function ReportsInner() {
           {tab === "analysis" && (
             <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
-                docTitle="تقرير تحليل أداء الفصل" axisLabel={axisLabel} />
-              <table className="sheet-table">
-                <thead>
-                  <tr><th>المجموعة</th><th>العظمى</th><th>متوسط الكشف</th><th>أعلى درجة</th><th>أدنى درجة</th><th>نسبة الإتقان ≥ 60%</th></tr>
-                </thead>
-                <tbody>
-                  {([
-                    { label: "المهام الأدائية", max: perfMax, avg: groupedStats.perfAvg, top: groupedStats.perfTop, low: groupedStats.perfLow, mastery: groupedStats.perfMastery, any: grouped.some((r) => r.perfFilled > 0), dot: "#0f766e", bg: "#ccfbf1" },
-                    { label: "التقويمات التحريرية", max: writtenMax, avg: groupedStats.writtenAvg, top: groupedStats.writtenTop, low: groupedStats.writtenLow, mastery: groupedStats.writtenMastery, any: grouped.some((r) => r.writtenFilled > 0), dot: "#3730a3", bg: "#e0e7ff" },
-                  ]).map((row) => (
-                    <tr key={row.label}>
-                      <td style={{ textAlign: "right", fontWeight: 800 }}>
-                        <span className="band-chip" style={{ background: row.bg, color: row.dot }}>{row.label}</span>
-                      </td>
-                      <td>{fmt(row.max)}</td>
-                      <td style={{ fontWeight: 800 }}>{row.any ? row.avg.toFixed(2) : "—"}</td>
-                      <td>{row.any ? fmt(row.top) : "—"}</td>
-                      <td>{row.any ? fmt(row.low) : "—"}</td>
-                      <td>{row.any ? `${row.mastery.toFixed(0)}%` : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td style={{ textAlign: "right" }}>الإجمالي</td>
-                    <td>{fmt(maxTotal)}</td>
-                    <td>{gradedCount > 0 ? (rows.reduce((a, r) => a + r.total, 0) / gradedCount).toFixed(2) : "—"}</td>
-                    <td>{gradedCount > 0 ? fmt(Math.max(...rows.map((r) => r.total))) : "—"}</td>
-                    <td>{gradedCount > 0 ? fmt(Math.min(...rows.map((r) => r.total))) : "—"}</td>
-                    <td>{gradedCount > 0 ? `${((passCount / gradedCount) * 100).toFixed(0)}%` : "—"}</td>
-                  </tr>
-                </tfoot>
-              </table>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                {[
-                  ["عدد الطلاب", String(students.length), "#0a4630", "#eef3ee"],
-                  ["تم رصدهم", String(gradedCount), "#0b5449", "#ccfbf1"],
-                  ["الناجحون", `${passCount} (${gradedCount ? Math.round((passCount / gradedCount) * 100) : 0}%)`, "#047857", "#d1fae5"],
-                  ["المتوسط العام", `${classAvg.toFixed(1)}%`, "#8a6a1f", "#f7efd9"],
-                ].map(([k, v, fg, bg]) => (
-                  <div key={k} className="rounded-xl border border-[#dfe3da] p-3" style={{ background: bg as string }}>
-                    <div className="text-xl font-black" style={{ color: fg as string }}>{v}</div>
-                    <div className="text-[0.6rem] font-bold text-[#5c6f65]">{k}</div>
-                  </div>
-                ))}
-              </div>
+                docTitle={`تحليل نتائج مادة ${subject?.name ?? ""}`} axisLabel={axisLabel} />
+              {(() => {
+                const list: any[] = analysis?.classes ?? [];
+                const cur = list.find((c) => c.classId === Number(classId)) ?? list[0];
+                if (!analysis || !cur) {
+                  return <p className="py-10 text-center text-[0.8rem] font-bold text-[#8a968d]">لا توجد بيانات تحليل لهذه المادة والفترة.</p>;
+                }
+                const DIST = [
+                  { key: "excellent", label: "ممتاز", color: "#047857", bg: "#d1fae5" },
+                  { key: "veryGood", label: "جيد جداً", color: "#0f766e", bg: "#ccfbf1" },
+                  { key: "good", label: "جيد", color: "#1d4ed8", bg: "#dbeafe" },
+                  { key: "pass", label: "مقبول", color: "#b45309", bg: "#fef3c7" },
+                  { key: "fail", label: "ضعيف", color: "#b91c1c", bg: "#fee2e2" },
+                ];
+                const totalDist = Math.max(1, Object.values(cur.dist).reduce((a: number, n: unknown) => a + (Number(n) || 0), 0));
+                return (
+                  <>
+                    {/* مؤشرات الفصل المحدد */}
+                    <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+                      {[
+                        ["عدد الطلاب", String(cur.studentCount), "#0a4630", "#eef3ee"],
+                        ["تم رصدهم", String(cur.gradedCount), "#0b5449", "#ccfbf1"],
+                        ["نسبة النجاح", `${cur.passRate}%`, "#047857", "#d1fae5"],
+                        ["متوسط النسبة", `${cur.avgPct.toFixed(1)}%`, "#8a6a1f", "#f7efd9"],
+                      ].map(([k, v, fg, bg]) => (
+                        <div key={k as string} className="rounded-xl border border-[#dfe3da] p-2.5" style={{ background: bg as string }}>
+                          <div className="text-lg font-black" style={{ color: fg as string }}>{v}</div>
+                          <div className="text-[0.58rem] font-bold text-[#5c6f65]">{k}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* توزيع التقديرات */}
+                    <div className="mt-3">
+                      <div className="mb-1.5 text-[0.72rem] font-black text-[#0a4630]">توزيع التقديرات — {cur.gradeLabel} · فصل {cur.className}</div>
+                      <div className="flex w-full overflow-hidden rounded-lg" style={{ height: "16px" }}>
+                        {DIST.map((d) => {
+                          const w = (cur.dist[d.key] / totalDist) * 100;
+                          return w > 0 ? <div key={d.key} style={{ width: `${w}%`, background: d.color }} title={`${d.label}: ${cur.dist[d.key]}`} /> : null;
+                        })}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                        {DIST.map((d) => (
+                          <span key={d.key} className="flex items-center gap-1 text-[0.6rem] font-bold text-[#3c4f44]">
+                            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: d.color }} />
+                            {d.label}: {cur.dist[d.key]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* تحليل الخانات */}
+                    <div className="mt-3">
+                      <div className="mb-1.5 text-[0.72rem] font-black text-[#0a4630]">تحليل الخانات (البند × البند)</div>
+                      <table className="sheet-table">
+                        <thead>
+                          <tr><th style={{ textAlign: "right" }}>الخانة</th><th>النوع</th><th>العظمى</th><th>المتوسط</th><th>أعلى</th><th>أدنى</th><th>الإتقان ≥ 60%</th></tr>
+                        </thead>
+                        <tbody>
+                          {cur.components.map((c: any) => (
+                            <tr key={c.id}>
+                              <td style={{ textAlign: "right", fontWeight: 700 }}>{c.name}</td>
+                              <td><span className="band-chip" style={{ background: c.category === "performance" ? "#ccfbf1" : "#e0e7ff", color: c.category === "performance" ? "#0f766e" : "#3730a3" }}>{c.category === "performance" ? "أدائية" : "تحريرية"}</span></td>
+                              <td>{fmt(c.max)}</td>
+                              <td style={{ fontWeight: 800 }}>{c.filled ? c.avg.toFixed(1) : "—"}</td>
+                              <td>{c.filled ? fmt(c.top) : "—"}</td>
+                              <td>{c.filled ? fmt(c.low) : "—"}</td>
+                              <td>{c.filled ? `${c.mastery.toFixed(0)}%` : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* مقارنة الفصول في هذه المادة */}
+                    {list.length > 1 && (
+                      <div className="mt-3">
+                        <div className="mb-1.5 text-[0.72rem] font-black text-[#0a4630]">مقارنة الفصول — مادة {subject?.name}</div>
+                        <table className="sheet-table">
+                          <thead>
+                            <tr><th style={{ textAlign: "right" }}>الفصل</th><th>الطلاب</th><th>رُصدت</th><th>متوسط النسبة</th><th>نسبة النجاح</th><th>ممتاز</th><th>جيد جداً</th><th>جيد</th><th>مقبول</th><th>ضعيف</th></tr>
+                          </thead>
+                          <tbody>
+                            {list.map((c) => (
+                              <tr key={c.classId} style={c.classId === cur.classId ? { background: "#f6f8f3", fontWeight: 800 } : undefined}>
+                                <td style={{ textAlign: "right", fontWeight: 700 }}>{c.gradeLabel} · {c.className}</td>
+                                <td>{c.studentCount}</td>
+                                <td>{c.gradedCount}</td>
+                                <td>{c.gradedCount ? `${c.avgPct.toFixed(1)}%` : "—"}</td>
+                                <td>{c.gradedCount ? `${c.passRate}%` : "—"}</td>
+                                <td style={{ color: "#047857" }}>{c.dist.excellent}</td>
+                                <td style={{ color: "#0f766e" }}>{c.dist.veryGood}</td>
+                                <td style={{ color: "#1d4ed8" }}>{c.dist.good}</td>
+                                <td style={{ color: "#b45309" }}>{c.dist.pass}</td>
+                                <td style={{ color: "#b91c1c" }}>{c.dist.fail}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <SignatureRow teacher={teacher} />
             </div>
           )}

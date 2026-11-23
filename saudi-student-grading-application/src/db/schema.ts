@@ -37,6 +37,10 @@ export const teachers = pgTable("teachers", {
   // صور التواقيع (data URL) للمعلم ومدير المدرسة
   teacherSig: text("teacher_sig"),
   principalSig: text("principal_sig"),
+  // بريد استعادة كلمة المرور + رمز الاستعادة (hash) وصلاحيته
+  email: text("email"),
+  resetTokenHash: text("reset_token_hash"),
+  resetTokenExpires: timestamp("reset_token_expires", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

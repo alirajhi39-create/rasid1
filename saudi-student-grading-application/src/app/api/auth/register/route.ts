@@ -29,6 +29,10 @@ export async function POST(req: Request) {
     const academicYear = String(b?.academicYear ?? "").trim() || "1447هـ";
     const semester = String(b?.semester ?? "").trim() || "الفصل الدراسي الأول";
     const stage = String(b?.stage ?? "").trim() || "متوسط";
+    const email = String(b?.email ?? "").trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ ok: false, error: "صيغة البريد الإلكتروني غير صحيحة" }, { status: 400 });
+    }
 
     if (fullName.length < 3) {
       return NextResponse.json({ ok: false, error: "أدخل الاسم الرباعي الكامل" }, { status: 400 });
@@ -52,8 +56,8 @@ export async function POST(req: Request) {
 
     const hash = await hashPassword(password);
     const inserted = await db.execute<{ id: number }>(sql`
-      INSERT INTO teachers (username, full_name, job_title, password_hash, school_name, education_admin, education_office, city, principal_name, academic_year, semester, stage)
-      VALUES (${username}, ${fullName}, ${jobTitle}, ${hash}, ${schoolName}, ${educationAdmin}, ${educationOffice}, ${city}, ${principalName}, ${academicYear}, ${semester}, ${stage})
+      INSERT INTO teachers (username, full_name, job_title, password_hash, school_name, education_admin, education_office, city, principal_name, academic_year, semester, stage, email)
+      VALUES (${username}, ${fullName}, ${jobTitle}, ${hash}, ${schoolName}, ${educationAdmin}, ${educationOffice}, ${city}, ${principalName}, ${academicYear}, ${semester}, ${stage}, ${email === "" ? null : email})
       RETURNING id
     `);
     const teacherId = inserted.rows[0]?.id;

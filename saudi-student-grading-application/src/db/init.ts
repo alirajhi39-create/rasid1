@@ -115,6 +115,9 @@ ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_good_min SMALLINT NOT NULL DE
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS band_pass_min SMALLINT NOT NULL DEFAULT 60;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS teacher_sig TEXT;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS principal_sig TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS reset_token_hash TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
 
 -- جدول الربط القديم (نحتفظ به للرجوع، ولا يُستخدم)
 CREATE TABLE IF NOT EXISTS subject_grade_links (

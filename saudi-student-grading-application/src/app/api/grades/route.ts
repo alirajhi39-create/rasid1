@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 
   const [students, subject, components, bandsRow] = await Promise.all([
     db.execute(sql`
-      SELECT id, full_name, national_id FROM students
+      SELECT id, full_name, national_id, guardian_phone FROM students
       WHERE class_id = ${classId} ORDER BY full_name ASC
     `),
     db.execute(sql`
