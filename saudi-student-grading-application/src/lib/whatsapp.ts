@@ -52,6 +52,49 @@ export function buildWaMessage(d: WaResultData): string {
   ].join("\n");
 }
 
+/** قائمة الملاحظات (الأماكن القابلة للاستبدال) في صيغة الرسالة */
+export const WA_PLACEHOLDERS: Array<{ key: string; label: string }> = [
+  { key: "{student}", label: "اسم الطالب" },
+  { key: "{subject}", label: "المادة" },
+  { key: "{class}", label: "الفصل/الشعبة" },
+  { key: "{axis}", label: "الفصل الدراسي والفترة" },
+  { key: "{perf}", label: "درجة المهام الأدائية" },
+  { key: "{written}", label: "درجة التقويمات التحريرية" },
+  { key: "{total}", label: "المجموع" },
+  { key: "{max}", label: "الدرجة العظمى" },
+  { key: "{pct}", label: "النسبة المئوية" },
+  { key: "{band}", label: "التقدير" },
+  { key: "{school}", label: "اسم المدرسة" },
+  { key: "{teacher}", label: "اسم المعلم" },
+];
+
+/** الصيغة الافتراضية لرسالة ولي الأمر */
+export const WA_DEFAULT_TEMPLATE = [
+  "أهلاً وسهلاً، ولي أمر الطالب/ة {student}",
+  "{school}",
+  "المادة: {subject} — {class}",
+  "الفترة: {axis}",
+  "--------------------------",
+  "المهام الأدائية: {perf}",
+  "التقويمات التحريرية: {written}",
+  "المجموع: {total} من {max}",
+  "النسبة: {pct}",
+  "التقدير: {band}",
+  "--------------------------",
+  "مع خالص التحية — {teacher}",
+].join("\n");
+
+/** استبدال أماكن الاستبدال في الصيغة بالقيم الفعلية */
+export function renderTemplate(
+  template: string,
+  data: Record<string, string | number | null>
+): string {
+  return template.replace(/\{(\w+)\}/g, (m, key: string) => {
+    const v = data[key];
+    return v === null || v === undefined ? "—" : String(v);
+  });
+}
+
 /** رابط wa.me مع الرسالة (يفتح واتساب بالرسالة جاهزة للإرسال) */
 export function waLink(phone: string, message: string): string | null {
   const p = normalizeSaudiPhone(phone);

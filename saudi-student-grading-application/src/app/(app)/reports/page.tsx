@@ -8,7 +8,7 @@ import {
   BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
-import { buildWaMessage, openWhatsApp } from "@/lib/whatsapp";
+import { buildWaMessage, openWhatsApp, waLink, renderTemplate, WA_DEFAULT_TEMPLATE, WA_PLACEHOLDERS } from "@/lib/whatsapp";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 type SubjectItem = { id: number; name: string; color: string; is_active: boolean; class_ids?: number[] };
@@ -28,7 +28,7 @@ type YearRow = {
   sem1: number; sem2: number; yearTotal: number; avg: number; percent: number;
   semMax: number; yearMax: number;
 };
-type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1";
+type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1" | "wa";
 
 const SEMESTERS: Record<string, string> = { "1": "الفصل الدراسي الأول", "2": "الفصل الدراسي الثاني" };
 const PERIODS: Record<string, string> = { "1": "الفترة الأولى", "2": "الفترة الثانية" };
@@ -67,6 +67,13 @@ function ReportsInner() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
+  // ===== الإرسال الجماعي عبر واتساب =====
+  const [waTemplate, setWaTemplate] = useState<string>(() => {
+    try { return localStorage.getItem("rased-wa-template") || ""; } catch { return ""; }
+  });
+  const [waSelected, setWaSelected] = useState<Set<number>>(new Set());
+  const [waQueue, setWaQueue] = useState<Array<{ name: string; link: string }>>([]);
+  const [waQi, setWaQi] = useState(0);
 
   // المواد الظاهرة = المرتبطة بهذا الفصل تحديداً
   const linkedSubjects = useMemo(
@@ -217,6 +224,57 @@ function ReportsInner() {
   const passCount = rows.filter((r) => r.total >= passScore && r.filled > 0).length;
   const gradedCount = rows.filter((r) => r.filled > 0).length;
 
+  // ===== أدوات الإرسال الجماعي عبر واتساب =====
+  const waTemplateEffective = waTemplate.trim() ? waTemplate : WA_DEFAULT_TEMPLATE;
+  const waRowData = (r: (typeof grouped)[number]) => ({
+    student: r.s.full_name,
+    subject: subject?.name ?? "",
+    class: classLabel,
+    axis: axisLabel,
+    perf: r.perfFilled > 0 ? `${fmt(r.perf)} من ${perfMax}` : "لم تُرصد بعد",
+    written: r.writtenFilled > 0 ? `${fmt(r.written)} من ${writtenMax}` : "لم تُرصد بعد",
+    total: r.filled > 0 ? fmt(r.total) : "—",
+    max: fmt(maxTotal),
+    pct: r.filled > 0 ? `${r.pct.toFixed(1)}%` : "—",
+    band: r.filled > 0 ? r.band.label : "—",
+    school: teacher?.school_name ?? "",
+    teacher: teacher?.full_name ?? "",
+  });
+  const waEligible = useMemo(
+    () => grouped.filter((r) => (r.s.guardian_phone ?? "").replace(/\D/g, "").length >= 9),
+    [grouped]
+  );
+  const waMissing = grouped.length - waEligible.length;
+
+  useEffect(() => {
+    if (tab !== "wa") return;
+    setWaSelected((prev) => (prev.size > 0 ? prev : new Set(waEligible.map((r) => r.s.id))));
+  }, [tab, waEligible]);
+
+  const saveWaTemplate = (v: string) => {
+    setWaTemplate(v);
+    try { localStorage.setItem("rased-wa-template", v); } catch { /* ignore */ }
+  };
+
+  const startWaQueue = () => {
+    const items = waEligible
+      .filter((r) => waSelected.has(r.s.id))
+      .map((r) => ({ name: r.s.full_name, link: waLink(r.s.guardian_phone ?? "", renderTemplate(waTemplateEffective, waRowData(r))) }))
+      .filter((x): x is { name: string; link: string } => Boolean(x.link));
+    if (items.length === 0) { toast("لا يوجد طلاب منتخبون برقم جوال", "error"); return; }
+    setWaQueue(items);
+    setWaQi(0);
+    window.open(items[0].link, "_blank", "noopener,noreferrer");
+    toast(`بدأ الإرسال — ${items.length} رسالة (افتُتحت الأولى)`);
+  };
+  const waNext = () => {
+    const next = waQi + 1;
+    if (next >= waQueue.length) { setWaQueue([]); setWaQi(0); toast("اكتمل الإرسال للكل"); return; }
+    setWaQi(next);
+    window.open(waQueue[next].link, "_blank", "noopener,noreferrer");
+  };
+  const waStop = () => { setWaQueue([]); setWaQi(0); };
+
   const passingYear = yearRows.filter((r) => r.avg >= passScore).length;
   const gradedYear = yearRows.filter((r) => r.yearTotal > 0).length;
   const yearAvg = yearRows.length ? yearRows.reduce((a, r) => a + r.percent, 0) / yearRows.length : 0;
@@ -286,6 +344,7 @@ function ReportsInner() {
     { key: "analysis", label: "تحليل أداء الفصل", icon: BarChart3 },
     { key: "sem1", label: "ملخص الفصل الأول", icon: Medal },
     { key: "year", label: "ملخص الفصلين والعام", icon: Sigma },
+    { key: "wa", label: "إرسال واتساب جماعي", icon: MessageCircle },
   ];
 
   /** طباعة مع حقن اتجاه @page ديناميكياً — الطريقة الموثوقة في Chrome/Edge */
@@ -832,6 +891,97 @@ function ReportsInner() {
               <SignatureRow teacher={teacher} />
             </div>
           )}
+
+          {/* ===== الإرسال الجماعي عبر واتساب ===== */}
+          {tab === "wa" && (
+            <div className="grid gap-4 lg:grid-cols-5">
+              {/* الصيغة القابلة للتحكم */}
+              <div className="card p-5 lg:col-span-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 font-black text-[#0a4630]"><MessageCircle className="text-[#25d366]" /> صيغة الرسالة</h3>
+                  <button onClick={() => saveWaTemplate(WA_DEFAULT_TEMPLATE)} className="btn btn-ghost !py-1.5 text-[0.68rem]">استعادة الصيغة الافتراضية</button>
+                </div>
+                <p className="mt-1 text-[0.68rem] font-semibold text-[#8a968d]">حرّر الرسالة كما تريد — اضغط أي ملاحظة أدناه لإدراجها، واطلع على المعاينة الحية.</p>
+                <textarea
+                  value={waTemplateEffective}
+                  onChange={(e) => saveWaTemplate(e.target.value)}
+                  rows={12}
+                  className="input mt-3 w-full font-mono text-[0.78rem] leading-relaxed"
+                  dir="rtl"
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {WA_PLACEHOLDERS.map((p) => (
+                    <button key={p.key} type="button"
+                      onClick={() => saveWaTemplate(waTemplateEffective + " " + p.key)}
+                      title={p.label}
+                      className="rounded-lg border border-[#dfe2da] bg-[#fbfbf8] px-2 py-1 text-[0.62rem] font-bold text-[#0e5c3a] transition hover:bg-emerald-50">
+                      <span dir="ltr">{p.key}</span> · {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* المعاينة + الاختيار */}
+              <div className="card p-5 lg:col-span-2">
+                <h3 className="font-black text-[#0a4630]">معاينة حية</h3>
+                <div className="mt-2 rounded-2xl border border-[#dfe3da] bg-[#f6faf7] p-3 text-[0.75rem] leading-relaxed text-[#22332a] whitespace-pre-wrap">
+                  {waEligible[0] ? renderTemplate(waTemplateEffective, waRowData(waEligible[0])) : "لا يوجد طلاب برقم جوال في هذا الفصل"}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between">
+                  <h3 className="font-black text-[#0a4630]">الطلاب المستهدفون</h3>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setWaSelected(new Set(waEligible.map((r) => r.s.id)))} className="btn btn-ghost !py-1 text-[0.65rem]">تحديد الكل</button>
+                    <button onClick={() => setWaSelected(new Set())} className="btn btn-ghost !py-1 text-[0.65rem]">إلغاء الكل</button>
+                  </div>
+                </div>
+                <p className="mt-1 text-[0.65rem] font-semibold text-[#8a968d]">
+                  {waEligible.length} طالباً برقم جوال
+                  {waMissing > 0 && <span className="text-amber-700"> · {waMissing} بدون رقم (لن يُرسل لهم)</span>}
+                </p>
+                <div className="mt-2 max-h-64 space-y-1 overflow-y-auto pe-1">
+                  {waEligible.map((r) => (
+                    <label key={r.s.id} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 transition ${waSelected.has(r.s.id) ? "border-emerald-300 bg-emerald-50/60" : "border-[#eef0ea] bg-white"}`}>
+                      <input type="checkbox" className="accent-[#0e5c3a]" checked={waSelected.has(r.s.id)}
+                        onChange={(e) => {
+                          setWaSelected((prev) => {
+                            const n = new Set(prev);
+                            if (e.target.checked) n.add(r.s.id); else n.delete(r.s.id);
+                            return n;
+                          });
+                        }} />
+                      <span className="flex-1 truncate text-[0.75rem] font-bold text-[#22332a]">{r.s.full_name}</span>
+                      <span className="text-[0.62rem] font-semibold tabular-nums text-[#8a968d]" dir="ltr">{r.s.guardian_phone}</span>
+                    </label>
+                  ))}
+                </div>
+                <button onClick={startWaQueue} disabled={waSelected.size === 0}
+                  className="btn mt-3 w-full justify-center !bg-[#25d366] !text-white">
+                  <MessageCircle size={17} /> إرسال إلى {waSelected.size} طالب عبر واتساب
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* نافذة طابور الإرسال الجماعي */}
+      {waQueue.length > 0 && (
+        <div className="no-print fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-[#e6e7e0] bg-white p-4 shadow-2xl">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-[0.78rem] font-black text-[#0a4630]"><MessageCircle size={17} className="text-[#25d366]" /> جارٍ الإرسال الجماعي</span>
+            <button onClick={waStop} className="rounded-lg px-2 py-1 text-[0.65rem] font-bold text-red-600 hover:bg-red-50">إيقاف</button>
+          </div>
+          <div className="mt-2 text-[0.72rem] font-bold text-[#3c4f44]">
+            الرسالة {waQi + 1} من {waQueue.length} — <span className="text-[#0e5c3a]">{waQueue[waQi]?.name}</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#eef0ea]">
+            <div className="h-full rounded-full bg-[#25d366] transition-all" style={{ width: `${((waQi + 1) / waQueue.length) * 100}%` }} />
+          </div>
+          <button onClick={waNext} className="btn btn-primary mt-3 w-full justify-center text-[0.75rem]">
+            {waQi + 1 >= waQueue.length ? "إنهاء (افتُتحت الأخيرة)" : "افتح التالي ←"}
+          </button>
+          <p className="mt-2 text-[0.6rem] font-semibold text-[#8a968d]">تُفتح كل رسالة في واتساب جاهزة — راجع واضغط «إرسال» ثم «افتح التالي».</p>
         </div>
       )}
 

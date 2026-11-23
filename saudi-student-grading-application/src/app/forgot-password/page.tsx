@@ -7,7 +7,7 @@ import { KeyRound, Mail, ArrowRight, Loader2, CheckCircle2, Copy, ExternalLink }
 function ForgotInner() {
   const [identifier, setIdentifier] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ message: string; devLink?: string } | null>(null);
+  const [result, setResult] = useState<{ message: string; devLink?: string; configured?: boolean } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -23,7 +23,7 @@ function ForgotInner() {
       });
       const d = await r.json();
       if (!d.ok) { setError(d.error ?? "تعذر المعالجة"); return; }
-      setResult({ message: d.message, devLink: d.devLink });
+      setResult({ message: d.message, devLink: d.devLink, configured: d.configured });
     } catch {
       setError("تعذر الاتصال بالخادم");
     }
@@ -86,6 +86,16 @@ function ForgotInner() {
                     <button onClick={() => { navigator.clipboard.writeText(result.devLink!); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
                       className="btn btn-ghost !py-2 text-[0.72rem]">{copied ? <CheckCircle2 size={14} /> : <Copy size={14} />} نسخ</button>
                   </div>
+                </div>
+              )}
+              {result.configured === false && (
+                <div className="mt-3 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-3 text-[0.7rem] leading-relaxed text-amber-100">
+                  <div className="font-black text-amber-200">لتفعيل الإرسال الفعلي إلى البريد: </div>
+                  <ol className="mt-1 list-decimal space-y-1 pr-4">
+                    <li>أنشئ حساباً مجانياً في <b dir="ltr">resend.com</b> وانسخ مفتاح API.</li>
+                    <li>في لوحة Vercel ← Project ← <b dir="ltr">Settings</b> ← <b dir="ltr">Environment Variables</b> أضف: <b dir="ltr">RESEND_API_KEY</b> و <b dir="ltr">RESEND_FROM</b>.</li>
+                    <li>أعد النشر، وسيصل الرابط تلقائياً إلى بريدك المسجّل في الإعدادات.</li>
+                  </ol>
                 </div>
               )}
             </>

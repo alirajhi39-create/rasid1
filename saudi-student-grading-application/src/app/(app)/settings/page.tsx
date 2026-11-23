@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Settings, School, Save, KeyRound, Database, Loader2, CheckCircle2, ShieldCheck,
-  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload, Gauge, Trash2, PenLine,
+  Eye, EyeOff, Server, Info, RefreshCw, Archive, Download, Clock, Upload, Gauge, Trash2, PenLine, Mail,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 
@@ -36,6 +36,7 @@ export default function SettingsPage() {
   const [bandBusy, setBandBusy] = useState(false);
   const [sig, setSig] = useState<{ teacher: string | null; principal: string | null }>({ teacher: null, principal: null });
   const [sigBusy, setSigBusy] = useState(false);
+  const [emailCfg, setEmailCfg] = useState<{ configured: boolean; from?: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).then((d) => {
@@ -55,6 +56,7 @@ export default function SettingsPage() {
       setLoading(false);
     });
     fetch("/api/health", { cache: "no-store" }).then((r) => r.json()).then((d) => setHealth(d.ok ? "ok" : "down")).catch(() => setHealth("down"));
+    fetch("/api/auth/email-status", { cache: "no-store" }).then((r) => r.json()).then((d) => d.ok && setEmailCfg({ configured: d.configured, from: d.from })).catch(() => {});
   }, []);
 
   const set = (k: keyof TeacherForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -355,6 +357,19 @@ export default function SettingsPage() {
               {pwBusy ? <Loader2 size={17} className="animate-spin" /> : <ShieldCheck size={17} />} تحديث كلمة المرور
             </button>
           </div>
+          {emailCfg && (
+            <div className={`mt-3 rounded-2xl border p-3 text-[0.68rem] leading-relaxed ${emailCfg.configured ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+              <div className="flex items-center gap-2 font-black">
+                <Mail size={15} />
+                {emailCfg.configured ? "إرسال البريد مفعّل (Resend)" : "إرسال البريد غير مفعّل بعد"}
+              </div>
+              {emailCfg.configured ? (
+                <p className="mt-1">سيصل رابط الاستعادة إلى البريد المسجّل أعلاه تلقائياً. المرسل: <b dir="ltr">{emailCfg.from}</b></p>
+              ) : (
+                <p className="mt-1">للتفعيل أضف متغيّري <b dir="ltr">RESEND_API_KEY</b> و <b dir="ltr">RESEND_FROM</b> في لوحة Vercel ثم أعد النشر. حتى ذلك الحين يظهر رابط الاستعادة في الشاشة مباشرة.</p>
+              )}
+            </div>
+          )}
         </form>
 
         {/* ===== نسب التقدير ===== */}

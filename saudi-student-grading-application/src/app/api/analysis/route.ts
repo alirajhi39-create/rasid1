@@ -42,11 +42,20 @@ export async function GET(req: Request) {
   let classList = classes.rows as Array<{ id: number; name: string; grade_label: string }>;
   if (classIdParam) classList = classList.filter((c) => c.id === Number(classIdParam));
 
-  // عتبات التقدير للمعلم
+  // عتبات التقدير للمعلم (مع أسماء مختصرة تطابق الكائن)
   const bandsRow = await db.execute<{ e: number; vg: number; g: number; p: number }>(sql`
-    SELECT band_excellent_min, band_very_good_min, band_good_min, band_pass_min FROM teachers WHERE id = ${session.sub} LIMIT 1
+    SELECT band_excellent_min AS e, band_very_good_min AS vg, band_good_min AS g, band_pass_min AS p
+    FROM teachers WHERE id = ${session.sub} LIMIT 1
   `);
-  const b = bandsRow.rows[0] ?? { e: 90, vg: 80, g: 70, p: 60 };
+  const rawB = bandsRow.rows[0];
+  const b = rawB
+    ? {
+        e: Number(rawB.e) || 90,
+        vg: Number(rawB.vg) || 80,
+        g: Number(rawB.g) || 70,
+        p: Number(rawB.p) || 60,
+      }
+    : { e: 90, vg: 80, g: 70, p: 60 };
 
   const result = [];
   for (const cls of classList) {
@@ -63,22 +72,24 @@ export async function GET(req: Request) {
         AND g.semester = ${semester} AND g.period = ${period} AND g.value IS NOT NULL
     `);
 
-    // تجميع درجات كل طالب
-    const byStudent = new Map<number, number[]>(); // studentId -> [total, filledComps, filledCells]
+    // تجميع درجات كل طالب: [المجموع، عدد الخانات المعبأة، مجموع عظمى الخانات المعبأة]
+    const compMaxMap = new Map<number, number>(comps.map((c) => [Number(c.id), Number(c.max_score)]));
+    const byStudent = new Map<number, number[]>(); // studentId -> [total, filledCount, filledMaxSum]
     const byComp = new Map<number, number[]>(); // componentId -> values
     for (const g of gradesRows.rows as Array<{ student_id: number; component_id: number; value: number }>) {
       const st = byStudent.get(g.student_id) ?? [0, 0, 0];
-      st[0] += g.value; st[1]++; st[2]++;
+      st[0] += g.value; st[1]++; st[2] += compMaxMap.get(g.component_id) ?? 0;
       byStudent.set(g.student_id, st);
       (byComp.get(g.component_id) ?? byComp.set(g.component_id, []).get(g.component_id)!).push(g.value);
     }
 
     const dist = { excellent: 0, veryGood: 0, good: 0, pass: 0, fail: 0 };
     let pctSum = 0, graded = 0, pass = 0;
-    for (const [, [total, filled]] of byStudent) {
+    for (const [, [total, filled, filledMaxSum]] of byStudent) {
       if (filled === 0) continue;
       graded++;
-      const pct = compMax > 0 ? (total / compMax) * 100 : 0;
+      // نسبة عادلة: على ما رُصد فعلاً (لا يُعاقب الطالب على خانات لم تُحطّب بعد)
+      const pct = filledMaxSum > 0 ? (total / filledMaxSum) * 100 : 0;
       pctSum += pct;
       if (pct >= b.p) pass++;
       if (pct >= b.e) dist.excellent++;
