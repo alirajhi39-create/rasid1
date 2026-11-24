@@ -112,7 +112,7 @@ export async function POST(req: Request) {
         subjMap.set(Number(sub.id), newSubjectId);
 
         for (const c of sub.components ?? []) {
-          const cat = c.category === "performance" ? "performance" : "written";
+          const cat = c.category === "performance" ? "performance" : c.category === "written_oral" ? "written_oral" : "written";
           const cr = await tx.execute<{ id: number }>(sql`
             INSERT INTO grade_components (subject_id, name, category, max_score, weight_label, is_active, sort_order)
             VALUES (${newSubjectId}, ${String(c.name ?? "").slice(0, 150)}, ${cat}, ${Number(c.maxScore) || 0},

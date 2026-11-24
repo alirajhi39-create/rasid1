@@ -192,9 +192,11 @@ function ReportsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [students, components, grades, maxTotal, teacher]);
 
-  // مجاميع المجموعتين لكل طالب (للطباعة: الإجماليات فقط دون البنود)
+  // مجاميع المجموعات لكل طالب (للطباعة: الإجماليات فقط دون البنود)
   const perfMax = components.filter((c) => c.category === "performance").reduce((a, c) => a + Number(c.max_score), 0);
-  const writtenMax = components.filter((c) => c.category === "written").reduce((a, c) => a + Number(c.max_score), 0);
+  const writtenMax = components.filter((c) => c.category === "written" || c.category === "written_oral").reduce((a, c) => a + Number(c.max_score), 0);
+  const hasWrittenOral = components.some((c) => c.category === "written_oral");
+  const writtenColLabel = hasWrittenOral ? "التقويمات التحريرية والشفوية" : "التقويمات التحريرية";
   const grouped = useMemo(() => rows.map((r) => {
     let perf = 0, perfFilled = 0, written = 0, writtenFilled = 0;
     components.forEach((c, j) => {
@@ -508,7 +510,7 @@ function ReportsInner() {
                   </tr>
                   <tr>
                     <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
-                    <th className="grp-written">التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
+                    <th className="grp-written">{writtenColLabel}<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -577,7 +579,7 @@ function ReportsInner() {
                     <thead>
                       <tr>
                         <th className="grp-perf">المهام الأدائية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#ccfbf1" }}>من {fmt(perfMax)}</span></th>
-                        <th className="grp-written">التقويمات التحريرية<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
+                        <th className="grp-written">{writtenColLabel}<br /><span style={{ fontWeight: 600, fontSize: "0.6rem", color: "#e0e7ff" }}>من {fmt(writtenMax)}</span></th>
                         <th className="grp-sum">المجموع<br />{fmt(maxTotal)}</th>
                         <th>النسبة</th><th>التقدير</th>
                       </tr>
@@ -691,7 +693,10 @@ function ReportsInner() {
                           {cur.components.map((c: any) => (
                             <tr key={c.id}>
                               <td style={{ textAlign: "right", fontWeight: 700 }}>{c.name}</td>
-                              <td><span className="band-chip" style={{ background: c.category === "performance" ? "#ccfbf1" : "#e0e7ff", color: c.category === "performance" ? "#0f766e" : "#3730a3" }}>{c.category === "performance" ? "أدائية" : "تحريرية"}</span></td>
+                              <td><span className="band-chip" style={{
+                                background: c.category === "performance" ? "#ccfbf1" : c.category === "written_oral" ? "#f5d0fe" : "#e0e7ff",
+                                color: c.category === "performance" ? "#0f766e" : c.category === "written_oral" ? "#a21caf" : "#3730a3"
+                              }}>{c.category === "performance" ? "أدائية" : c.category === "written_oral" ? "تحريري/شفوي" : "تحريرية"}</span></td>
                               <td>{fmt(c.max)}</td>
                               <td style={{ fontWeight: 800 }}>{c.filled ? c.avg.toFixed(1) : "—"}</td>
                               <td>{c.filled ? fmt(c.top) : "—"}</td>

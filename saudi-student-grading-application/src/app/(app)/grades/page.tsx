@@ -109,7 +109,8 @@ export default function GradesPage() {
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const perfSumMax = useMemo(() => components.filter((c) => c.category === "performance").reduce((a, c) => a + Number(c.max_score), 0), [components]);
-  const writtenSumMax = useMemo(() => components.filter((c) => c.category === "written").reduce((a, c) => a + Number(c.max_score), 0), [components]);
+  const writtenSumMax = useMemo(() => components.filter((c) => c.category === "written" || c.category === "written_oral").reduce((a, c) => a + Number(c.max_score), 0), [components]);
+  const hasWrittenOral = components.some((c) => c.category === "written_oral");
   const perfCount = components.filter((c) => c.category === "performance").length;
   const writtenCount = components.length - perfCount;
   const passScore = subject ? Number(subject.pass_score) : 50;
@@ -384,13 +385,13 @@ export default function GradesPage() {
                   {perfCount > 0 && (
                     <th colSpan={perfCount} className="border-s border-teal-800/40 bg-teal-950/70 px-2 py-1 text-center">
                       <div className="text-[0.68rem] font-black text-teal-200">المهام الأدائية</div>
-                      <div className="text-[0.55rem] font-bold text-teal-400/90">مجموعها {perfSumMax} / 40</div>
+                      <div className="text-[0.55rem] font-bold text-teal-400/90">مجموعها {perfSumMax}</div>
                     </th>
                   )}
                   {writtenCount > 0 && (
                     <th colSpan={writtenCount} className="border-s border-indigo-800/40 bg-indigo-950/70 px-2 py-1 text-center">
-                      <div className="text-[0.68rem] font-black text-indigo-200">التقويمات التحريرية</div>
-                      <div className="text-[0.55rem] font-bold text-indigo-400/90">مجموعها {writtenSumMax} / 60</div>
+                      <div className="text-[0.68rem] font-black text-indigo-200">{hasWrittenOral ? "التقويمات التحريرية والشفوية" : "التقويمات التحريرية"}</div>
+                      <div className="text-[0.55rem] font-bold text-indigo-400/90">مجموعها {writtenSumMax}</div>
                     </th>
                   )}
                   <th rowSpan={3} className="min-w-[72px] border-s border-white/10 bg-[#062e1f] px-2 text-center align-middle text-[0.7rem] font-black text-[#e7cf9a]">المجموع<br /><span className="text-[0.55rem] font-bold text-emerald-200/70">/ {maxTotal}</span></th>
@@ -402,7 +403,7 @@ export default function GradesPage() {
                   {components.map((c) => (
                     <th key={c.id} className="min-w-[86px] border-white/10 border-s px-1 py-1.5 text-center align-middle">
                       <div className="text-[0.66rem] font-extrabold leading-tight text-white">{c.name}</div>
-                      <div className="mt-0.5 text-[0.56rem] font-bold text-[#c9a24b]">{c.category === "performance" ? "أدائية" : "تحريرية"} · {Number(c.max_score)}</div>
+                      <div className="mt-0.5 text-[0.56rem] font-bold text-[#c9a24b]">{c.category === "performance" ? "أدائية" : c.category === "written_oral" ? "تحريري/شفوي" : "تحريرية"} · {Number(c.max_score)}</div>
                     </th>
                   ))}
                 </tr>

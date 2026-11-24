@@ -8,7 +8,7 @@ import {
 import { toast } from "@/components/AppShell";
 
 type Component = {
-  id: number; name: string; category: "performance" | "written";
+  id: number; name: string; category: "performance" | "written" | "written_oral";
   maxScore: number; weightLabel: string; isActive: boolean; sortOrder: number;
 };
 type Subject = {
@@ -20,6 +20,7 @@ type ClassItem = { id: number; name: string; grade_label: string; stage: string 
 const CATEGORY_META = {
   performance: { label: "المهام الأدائية", hint: "مجموعها 40 درجة", target: 40, tone: "bg-teal-50 text-teal-800 ring-teal-200", bar: "#0f766e" },
   written: { label: "التقويمات التحريرية", hint: "مجموعها 60 درجة", target: 60, tone: "bg-indigo-50 text-indigo-800 ring-indigo-200", bar: "#3730a3" },
+  written_oral: { label: "التقويمات التحريرية والشفوية", hint: "تحريري + شفوي", target: 0, tone: "bg-fuchsia-50 text-fuchsia-800 ring-fuchsia-200", bar: "#a21caf" },
 } as const;
 
 const PALETTE = ["#0e5c3a", "#0f766e", "#1d4ed8", "#be123d", "#8a5a00", "#4338ca", "#0369a1", "#a21caf"];
@@ -43,6 +44,7 @@ function ComponentRow({ c, idx, onChange, onRemove }: {
           value={c.category} onChange={(e) => onChange(idx, { category: e.target.value as Component["category"] })}>
           <option value="performance">المهام الأدائية</option>
           <option value="written">التقويمات التحريرية</option>
+          <option value="written_oral">التقويمات التحريرية والشفوية</option>
         </select>
       </td>
       <td className="px-3 py-1.5">
@@ -142,10 +144,10 @@ export default function SubjectsPage() {
 
   const addComponent = (category: Component["category"]) => {
     if (!selected) return;
+    const name = category === "performance" ? "مهمة أدائية جديدة" : category === "written_oral" ? "تقويم تحريري/شفوي جديد" : "تقويم تحريري جديد";
     const components = [
       ...selected.components,
-      { id: 0, name: category === "performance" ? "مهمة أدائية جديدة" : "تقويم تحريري جديد",
-        category, maxScore: 10, weightLabel: "", isActive: true, sortOrder: selected.components.length + 1 },
+      { id: 0, name, category, maxScore: 10, weightLabel: "", isActive: true, sortOrder: selected.components.length + 1 },
     ];
     setSubjects(subjects.map((s) => (s.id === selected.id ? { ...s, components } : s)));
   };
@@ -157,14 +159,15 @@ export default function SubjectsPage() {
   };
 
   const sums = useMemo(() => {
-    if (!selected) return { performance: 0, written: 0, total: 0 };
-    let performance = 0, written = 0;
+    if (!selected) return { performance: 0, written: 0, writtenOral: 0, total: 0 };
+    let performance = 0, written = 0, writtenOral = 0;
     for (const c of selected.components) {
       if (!c.isActive) continue;
       if (c.category === "performance") performance += Number(c.maxScore) || 0;
+      else if (c.category === "written_oral") writtenOral += Number(c.maxScore) || 0;
       else written += Number(c.maxScore) || 0;
     }
-    return { performance, written, total: performance + written };
+    return { performance, written, writtenOral, total: performance + written + writtenOral };
   }, [selected]);
 
   const saveDistribution = async () => {
@@ -347,23 +350,28 @@ export default function SubjectsPage() {
             </div>
 
             {/* ملخص المطابقة مع اللائحة */}
-            <div className="grid gap-2 border-b border-[#eef0ea] bg-white px-5 py-3 sm:grid-cols-3">
+            <div className="grid gap-2 border-b border-[#eef0ea] bg-white px-5 py-3 sm:grid-cols-4">
               {([
-                { label: "المهام الأدائية", value: sums.performance, target: 40 },
-                { label: "التقويمات التحريرية", value: sums.written, target: 60 },
-                { label: "المجموع الكلي", value: sums.total, target: 100 },
+                { label: "المهام الأدائية", value: sums.performance, color: "#0f766e" },
+                { label: "التقويمات التحريرية", value: sums.written, color: "#3730a3" },
+                { label: "التقويمات التحريرية والشفوية", value: sums.writtenOral, color: "#a21caf" },
               ]).map((row) => (
                 <div key={row.label} className="rounded-2xl border border-[#eef0ea] bg-[#fbfbf8] p-2.5">
-                  <div className="flex items-center justify-between text-[0.68rem] font-extrabold">
-                    <span className="text-[#5c6f65]">{row.label}</span>
-                    <span className={`tabular-nums ${sumTone(row.value, row.target)}`}>{row.value} / {row.target}</span>
+                  <div className="flex items-center gap-1.5 text-[0.64rem] font-extrabold text-[#5c6f65]">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: row.color }} />
+                    <span className="truncate">{row.label}</span>
                   </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#e8eae3]">
-                    <div className={`h-full rounded-full transition-all duration-500 ${row.value === row.target ? "bg-emerald-500" : row.value > row.target ? "bg-red-500" : "bg-amber-400"}`}
-                      style={{ width: `${progress(row.value, row.target)}%` }} />
-                  </div>
+                  <div className="mt-1 text-lg font-black tabular-nums text-[#0a4630]">{row.value}</div>
                 </div>
               ))}
+              <div className="rounded-2xl border border-[#e3d9b8] bg-[#fffdf2] p-2.5">
+                <div className="text-[0.64rem] font-extrabold text-[#8a6a1f]">المجموع الكلي</div>
+                <div className={`mt-1 text-lg font-black tabular-nums ${sumTone(sums.total, 100)}`}>{sums.total} / 100</div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#e8eae3]">
+                  <div className={`h-full rounded-full transition-all duration-500 ${sums.total === 100 ? "bg-emerald-500" : sums.total > 100 ? "bg-red-500" : "bg-amber-400"}`}
+                    style={{ width: `${progress(sums.total, 100)}%` }} />
+                </div>
+              </div>
             </div>
 
             {/* جدول الخانات — مقسّم إلى مجموعتين */}
@@ -414,6 +422,23 @@ export default function SubjectsPage() {
                   ))}
                   {selected.components.every((c) => c.category !== "written") && (
                     <tr><td colSpan={7} className="px-4 py-3 text-center text-[0.68rem] font-bold text-indigo-700">لا توجد خانات تحريرية — أضف أول خانة من الزر أعلاه</td></tr>
+                  )}
+                  {/* ===== التقويمات التحريرية والشفوية ===== */}
+                  <tr className="bg-fuchsia-50/70">
+                    <td colSpan={7} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[0.72rem] font-black text-fuchsia-900">التقويمات التحريرية والشفوية — مجموع {sums.writtenOral}</span>
+                        <button onClick={() => addComponent("written_oral")} className="inline-flex items-center gap-1 rounded-lg bg-fuchsia-800 px-2.5 py-1 text-[0.62rem] font-extrabold text-white transition hover:bg-fuchsia-900">
+                          <Plus size={12} /> خانة تحريري/شفوي
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {selected.components.map((c, idx) => c.category !== "written_oral" ? null : (
+                    <ComponentRow key={`wo-${idx}`} c={c} idx={idx} onChange={updateComponent} onRemove={removeComponent} />
+                  ))}
+                  {selected.components.every((c) => c.category !== "written_oral") && (
+                    <tr><td colSpan={7} className="px-4 py-3 text-center text-[0.68rem] font-bold text-fuchsia-700">لا توجد خانات تحريري/شفوي — أضف أول خانة من الزر أعلاه</td></tr>
                   )}
                 </tbody>
               </table>

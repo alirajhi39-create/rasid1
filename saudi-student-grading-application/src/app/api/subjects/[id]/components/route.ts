@@ -42,7 +42,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       let cat = String(c.category ?? "written");
       if (cat === "formative") cat = "performance";
       if (cat === "final" || cat === "custom") cat = "written";
-      if (cat !== "performance" && cat !== "written") cat = "written";
+      if (cat !== "performance" && cat !== "written" && cat !== "written_oral") cat = "written";
       return {
         id: c.id ? Number(c.id) : null,
         name: String(c.name ?? "").trim(),
