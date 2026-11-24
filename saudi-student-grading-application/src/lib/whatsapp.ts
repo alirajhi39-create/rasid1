@@ -102,6 +102,20 @@ export function waLink(phone: string, message: string): string | null {
   return `https://wa.me/${p}?text=${encodeURIComponent(message)}`;
 }
 
+/** رابط SMS (يفتح تطبيق الرسائل في الجوال بالرسالة جاهزة) */
+export function smsLink(phone: string, message: string): string | null {
+  const p = normalizeSaudiPhone(phone);
+  if (!p) return null;
+  return `sms:+${p}?body=${encodeURIComponent(message)}`;
+}
+
+export type WaChannel = "wa" | "sms";
+
+/** بناء رابط حسب القناة (واتساب أو رسالة نصية) */
+export function channelLink(channel: WaChannel, phone: string, message: string): string | null {
+  return channel === "sms" ? smsLink(phone, message) : waLink(phone, message);
+}
+
 export function openWhatsApp(phone: string, message: string): boolean {
   const link = waLink(phone, message);
   if (!link) return false;

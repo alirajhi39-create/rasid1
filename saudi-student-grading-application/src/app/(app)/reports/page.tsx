@@ -5,10 +5,10 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle, Smartphone,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
-import { buildWaMessage, openWhatsApp, waLink, renderTemplate, WA_DEFAULT_TEMPLATE, WA_PLACEHOLDERS } from "@/lib/whatsapp";
+import { buildWaMessage, openWhatsApp, waLink, channelLink, renderTemplate, WA_DEFAULT_TEMPLATE, WA_PLACEHOLDERS, type WaChannel } from "@/lib/whatsapp";
 
 type ClassItem = { id: number; name: string; grade_label: string; stage: string };
 type SubjectItem = { id: number; name: string; color: string; is_active: boolean; class_ids?: number[] };
@@ -67,6 +67,7 @@ function ReportsInner() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
+  const [anScope, setAnScope] = useState<"period" | "year">("period");
   // ===== الإرسال الجماعي عبر واتساب =====
   const [waTemplate, setWaTemplate] = useState<string>(() => {
     try { return localStorage.getItem("rased-wa-template") || ""; } catch { return ""; }
@@ -74,6 +75,7 @@ function ReportsInner() {
   const [waSelected, setWaSelected] = useState<Set<number>>(new Set());
   const [waQueue, setWaQueue] = useState<Array<{ name: string; link: string }>>([]);
   const [waQi, setWaQi] = useState(0);
+  const [waChannel, setWaChannel] = useState<WaChannel>("wa");
 
   // المواد الظاهرة = المرتبطة بهذا الفصل تحديداً
   const linkedSubjects = useMemo(
@@ -163,11 +165,11 @@ function ReportsInner() {
   // بيانات التحليل الشامل (لكل مادة وفصل)
   useEffect(() => {
     if (!subjectId || tab !== "analysis") { setAnalysis(null); return; }
-    fetch(`/api/analysis?subjectId=${subjectId}&semester=${semester}&period=${period}`, { cache: "no-store" })
+    fetch(`/api/analysis?subjectId=${subjectId}&semester=${semester}&period=${period}&scope=${anScope}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.ok) setAnalysis(d); })
       .catch(() => setAnalysis(null));
-  }, [subjectId, tab, semester, period]);
+  }, [subjectId, tab, semester, period, anScope]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const passScore = subject ? Number(subject.pass_score) : 50;
@@ -257,11 +259,13 @@ function ReportsInner() {
   };
 
   const startWaQueue = () => {
+    const msg = (r: (typeof grouped)[number]) => renderTemplate(waTemplateEffective, waRowData(r));
     const items = waEligible
       .filter((r) => waSelected.has(r.s.id))
-      .map((r) => ({ name: r.s.full_name, link: waLink(r.s.guardian_phone ?? "", renderTemplate(waTemplateEffective, waRowData(r))) }))
+      .map((r) => ({ name: r.s.full_name, link: channelLink(waChannel, r.s.guardian_phone ?? "", msg(r)) }))
       .filter((x): x is { name: string; link: string } => Boolean(x.link));
     if (items.length === 0) { toast("لا يوجد طلاب منتخبون برقم جوال", "error"); return; }
+    if (waChannel === "sms") toast("ملاحظة: إرسال الرسائل النصية يعمل من الجوال (يفتح تطبيق الرسائل)");
     setWaQueue(items);
     setWaQi(0);
     window.open(items[0].link, "_blank", "noopener,noreferrer");
@@ -341,9 +345,9 @@ function ReportsInner() {
   const TABS: Array<{ key: TabKey; label: string; icon: typeof Table2 }> = [
     { key: "sheet", label: "كشف الرصد الرسمي", icon: Table2 },
     { key: "notices", label: "الإشعارات الفردية", icon: UserRound },
-    { key: "analysis", label: "تحليل أداء الفصل", icon: BarChart3 },
+    { key: "analysis", label: "تحليل النتائج", icon: BarChart3 },
     { key: "sem1", label: "ملخص الفصل الأول", icon: Medal },
-    { key: "year", label: "ملخص الفصلين والعام", icon: Sigma },
+    { key: "year", label: "نهاية العام", icon: Sigma },
     { key: "wa", label: "إرسال واتساب جماعي", icon: MessageCircle },
   ];
 
@@ -611,12 +615,25 @@ function ReportsInner() {
           {tab === "analysis" && (
             <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
-                docTitle={`تحليل نتائج مادة ${subject?.name ?? ""}`} axisLabel={axisLabel} />
+                docTitle={`تحليل نتائج مادة ${subject?.name ?? ""} — ${anScope === "year" ? "العام الدراسي" : "الفصل والفترة"}`}
+                axisLabel={anScope === "year" ? "العام الدراسي كامل (الفصلان × الفترتان)" : axisLabel} />
+              {/* اختيار نطاق التحليل */}
+              <div className="no-print mb-3 flex gap-1 rounded-xl bg-[#eef1ec] p-1 w-fit">
+                {([
+                  { k: "period", label: "تحليل الفترة الحالية" },
+                  { k: "year", label: "تحليل العام الدراسي" },
+                ] as const).map((o) => (
+                  <button key={o.k} onClick={() => setAnScope(o.k)}
+                    className={`rounded-lg px-3 py-1.5 text-[0.7rem] font-extrabold transition ${anScope === o.k ? "bg-white text-[#0a4630] shadow" : "text-[#5c6f65]"}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
               {(() => {
                 const list: any[] = analysis?.classes ?? [];
                 const cur = list.find((c) => c.classId === Number(classId)) ?? list[0];
                 if (!analysis || !cur) {
-                  return <p className="py-10 text-center text-[0.8rem] font-bold text-[#8a968d]">لا توجد بيانات تحليل لهذه المادة والفترة.</p>;
+                  return <p className="py-10 text-center text-[0.8rem] font-bold text-[#8a968d]">لا توجد بيانات تحليل لهذه المادة والنطاق.</p>;
                 }
                 const DIST = [
                   { key: "excellent", label: "ممتاز", color: "#047857", bg: "#d1fae5" },
@@ -624,6 +641,7 @@ function ReportsInner() {
                   { key: "good", label: "جيد", color: "#1d4ed8", bg: "#dbeafe" },
                   { key: "pass", label: "مقبول", color: "#b45309", bg: "#fef3c7" },
                   { key: "fail", label: "ضعيف", color: "#b91c1c", bg: "#fee2e2" },
+                  { key: "incomplete", label: "غير مكتمل", color: "#9ca3af", bg: "#f3f4f6" },
                 ];
                 const totalDist = Math.max(1, Object.values(cur.dist).reduce((a: number, n: unknown) => a + (Number(n) || 0), 0));
                 return (
@@ -632,7 +650,7 @@ function ReportsInner() {
                     <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                       {[
                         ["عدد الطلاب", String(cur.studentCount), "#0a4630", "#eef3ee"],
-                        ["تم رصدهم", String(cur.gradedCount), "#0b5449", "#ccfbf1"],
+                        ["اكتمل رصدهم", `${cur.completeCount}/${cur.studentCount}`, "#0b5449", "#ccfbf1"],
                         ["نسبة النجاح", `${cur.passRate}%`, "#047857", "#d1fae5"],
                         ["متوسط النسبة", `${cur.avgPct.toFixed(1)}%`, "#8a6a1f", "#f7efd9"],
                       ].map(([k, v, fg, bg]) => (
@@ -691,21 +709,22 @@ function ReportsInner() {
                         <div className="mb-1.5 text-[0.72rem] font-black text-[#0a4630]">مقارنة الفصول — مادة {subject?.name}</div>
                         <table className="sheet-table">
                           <thead>
-                            <tr><th style={{ textAlign: "right" }}>الفصل</th><th>الطلاب</th><th>رُصدت</th><th>متوسط النسبة</th><th>نسبة النجاح</th><th>ممتاز</th><th>جيد جداً</th><th>جيد</th><th>مقبول</th><th>ضعيف</th></tr>
+                            <tr><th style={{ textAlign: "right" }}>الفصل</th><th>الطلاب</th><th>اكتمل</th><th>متوسط النسبة</th><th>نسبة النجاح</th><th>ممتاز</th><th>جيد جداً</th><th>جيد</th><th>مقبول</th><th>ضعيف</th><th>غير مكتمل</th></tr>
                           </thead>
                           <tbody>
                             {list.map((c) => (
                               <tr key={c.classId} style={c.classId === cur.classId ? { background: "#f6f8f3", fontWeight: 800 } : undefined}>
                                 <td style={{ textAlign: "right", fontWeight: 700 }}>{c.gradeLabel} · {c.className}</td>
                                 <td>{c.studentCount}</td>
-                                <td>{c.gradedCount}</td>
-                                <td>{c.gradedCount ? `${c.avgPct.toFixed(1)}%` : "—"}</td>
-                                <td>{c.gradedCount ? `${c.passRate}%` : "—"}</td>
+                                <td>{c.completeCount}/{c.studentCount}</td>
+                                <td>{c.completeCount > 0 ? `${c.avgPct.toFixed(1)}%` : "—"}</td>
+                                <td>{c.completeCount > 0 ? `${c.passRate}%` : "—"}</td>
                                 <td style={{ color: "#047857" }}>{c.dist.excellent}</td>
                                 <td style={{ color: "#0f766e" }}>{c.dist.veryGood}</td>
                                 <td style={{ color: "#1d4ed8" }}>{c.dist.good}</td>
                                 <td style={{ color: "#b45309" }}>{c.dist.pass}</td>
                                 <td style={{ color: "#b91c1c" }}>{c.dist.fail}</td>
+                                <td style={{ color: "#9ca3af" }}>{c.dist.incomplete ?? 0}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -797,7 +816,7 @@ function ReportsInner() {
           {tab === "year" && (
             <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
-                docTitle="كشف العام — مجموع الفصلين والمتوسط" axisLabel={teacher?.semester ?? "الفصل الدراسي"} />
+                docTitle="تقرير نهاية العام الدراسي — مجموع الفصلين والمتوسط" axisLabel="العام الدراسي كامل" />
               <table className="sheet-table" style={{ fontSize: "0.56rem" }}>
                 <colgroup>
                   <col style={{ width: "3.5%" }} />
@@ -892,9 +911,27 @@ function ReportsInner() {
             </div>
           )}
 
-          {/* ===== الإرسال الجماعي عبر واتساب ===== */}
+          {/* ===== الإرسال الجماعي (واتساب / رسالة نصية) ===== */}
           {tab === "wa" && (
-            <div className="grid gap-4 lg:grid-cols-5">
+            <>
+              <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+                <div>
+                  <h3 className="flex items-center gap-2 font-black text-[#0a4630]"><MessageCircle className="text-[#25d366]" /> إرسال جماعي لنتائج الطلاب</h3>
+                  <p className="mt-0.5 text-[0.68rem] font-semibold text-[#8a968d]">إلى جوال ولي الأمر المرتبط — اختر القناة ثم الطلاب ثم ابدأ.</p>
+                </div>
+                <div className="flex gap-1 rounded-xl bg-[#eef1ec] p-1">
+                  {([
+                    { k: "wa", label: "واتساب" },
+                    { k: "sms", label: "رسالة نصية SMS" },
+                  ] as const).map((o) => (
+                    <button key={o.k} onClick={() => setWaChannel(o.k)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.72rem] font-extrabold transition ${waChannel === o.k ? (o.k === "wa" ? "bg-[#25d366] text-white" : "bg-[#0a4630] text-white") + " shadow" : "text-[#5c6f65]"}`}>
+                      {o.k === "wa" ? <MessageCircle size={15} /> : <Smartphone size={15} />} {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-5">
               {/* الصيغة القابلة للتحكم */}
               <div className="card p-5 lg:col-span-3">
                 <div className="flex items-center justify-between">
@@ -956,11 +993,13 @@ function ReportsInner() {
                   ))}
                 </div>
                 <button onClick={startWaQueue} disabled={waSelected.size === 0}
-                  className="btn mt-3 w-full justify-center !bg-[#25d366] !text-white">
-                  <MessageCircle size={17} /> إرسال إلى {waSelected.size} طالب عبر واتساب
+                  className={`btn mt-3 w-full justify-center !text-white ${waChannel === "sms" ? "!bg-[#0a4630]" : "!bg-[#25d366]"}`}>
+                  {waChannel === "sms" ? <Smartphone size={17} /> : <MessageCircle size={17} />}
+                  إرسال إلى {waSelected.size} طالب عبر {waChannel === "sms" ? "رسالة نصية" : "واتساب"}
                 </button>
               </div>
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -969,7 +1008,7 @@ function ReportsInner() {
       {waQueue.length > 0 && (
         <div className="no-print fixed bottom-5 right-5 z-50 w-80 rounded-2xl border border-[#e6e7e0] bg-white p-4 shadow-2xl">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-[0.78rem] font-black text-[#0a4630]"><MessageCircle size={17} className="text-[#25d366]" /> جارٍ الإرسال الجماعي</span>
+            <span className="flex items-center gap-2 text-[0.78rem] font-black text-[#0a4630]">{waChannel === "sms" ? <Smartphone size={17} /> : <MessageCircle size={17} className="text-[#25d366]" />} جارٍ الإرسال الجماعي</span>
             <button onClick={waStop} className="rounded-lg px-2 py-1 text-[0.65rem] font-bold text-red-600 hover:bg-red-50">إيقاف</button>
           </div>
           <div className="mt-2 text-[0.72rem] font-bold text-[#3c4f44]">
@@ -981,7 +1020,7 @@ function ReportsInner() {
           <button onClick={waNext} className="btn btn-primary mt-3 w-full justify-center text-[0.75rem]">
             {waQi + 1 >= waQueue.length ? "إنهاء (افتُتحت الأخيرة)" : "افتح التالي ←"}
           </button>
-          <p className="mt-2 text-[0.6rem] font-semibold text-[#8a968d]">تُفتح كل رسالة في واتساب جاهزة — راجع واضغط «إرسال» ثم «افتح التالي».</p>
+          <p className="mt-2 text-[0.6rem] font-semibold text-[#8a968d]">{waChannel === "sms" ? "تُفتح كل رسالة في تطبيق الرسائل (من الجوال) — راجع وأرسل ثم «افتح التالي»." : "تُفتح كل رسالة في واتساب جاهزة — راجع واضغط «إرسال» ثم «افتح التالي»."}</p>
         </div>
       )}
 
