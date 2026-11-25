@@ -67,7 +67,8 @@ function ReportsInner() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
-  const [anScope, setAnScope] = useState<"period" | "year">("period");
+  const [anScope, setAnScope] = useState<"period" | "semester" | "year">("period");
+  const [maScope, setMaScope] = useState<"period" | "semester">("period");
   const [mastery, setMastery] = useState<any>(null);
   // ===== الإرسال الجماعي عبر واتساب =====
   const [waTemplate, setWaTemplate] = useState<string>(() => {
@@ -175,11 +176,11 @@ function ReportsInner() {
   // بيانات تحليل الإتقان والإجراءات التربوية
   useEffect(() => {
     if (!subjectId || !classId || tab !== "mastery") { setMastery(null); return; }
-    fetch(`/api/mastery?subjectId=${subjectId}&classId=${classId}&semester=${semester}&period=${period}`, { cache: "no-store" })
+    fetch(`/api/mastery?subjectId=${subjectId}&classId=${classId}&semester=${semester}&period=${period}&scope=${maScope}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.ok) setMastery(d); })
       .catch(() => setMastery(null));
-  }, [subjectId, classId, semester, period, tab]);
+  }, [subjectId, classId, semester, period, tab, maScope]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const passScore = subject ? Number(subject.pass_score) : 50;
@@ -662,12 +663,13 @@ function ReportsInner() {
           {tab === "analysis" && (
             <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
               <SheetHeader teacher={teacher} subjectName={subject?.name ?? ""} classLabel={classLabel} today={today}
-                docTitle={`تحليل نتائج مادة ${subject?.name ?? ""} — ${anScope === "year" ? "العام الدراسي" : "الفصل والفترة"}`}
-                axisLabel={anScope === "year" ? "العام الدراسي كامل (الفصلان × الفترتان)" : axisLabel} />
+                docTitle={`تحليل نتائج مادة ${subject?.name ?? ""} — ${anScope === "year" ? "العام الدراسي" : anScope === "semester" ? "الفصل الدراسي" : "الفصل والفترة"}`}
+                axisLabel={anScope === "year" ? "العام الدراسي كامل (الفصلان × الفترتان)" : anScope === "semester" ? `الفصل الدراسي ${semester} كامل (الفترتان)` : axisLabel} />
               {/* اختيار نطاق التحليل */}
               <div className="no-print mb-3 flex gap-1 rounded-xl bg-[#eef1ec] p-1 w-fit">
                 {([
                   { k: "period", label: "تحليل الفترة الحالية" },
+                  { k: "semester", label: "تحليل الفصل الدراسي" },
                   { k: "year", label: "تحليل العام الدراسي" },
                 ] as const).map((o) => (
                   <button key={o.k} onClick={() => setAnScope(o.k)}
@@ -975,7 +977,20 @@ function ReportsInner() {
               ) : (
                 <>
                   <SheetHeader teacher={teacher} subjectName={mastery.subject?.name ?? ""} classLabel={`${mastery.class?.grade_label ?? ""} — فصل ${mastery.class?.name ?? ""}`} today={today}
-                    docTitle={`تحليل الإتقان والإجراءات التربوية — مادة ${mastery.subject?.name ?? ""}`} axisLabel={axisLabel} />
+                    docTitle={`تحليل الإتقان والإجراءات التربوية — مادة ${mastery.subject?.name ?? ""}`} axisLabel={maScope === "semester" ? `الفصل الدراسي ${semester} كامل (الفترتان)` : axisLabel} />
+
+                  {/* اختيار نطاق التحليل */}
+                  <div className="no-print mb-3 flex gap-1 rounded-xl bg-[#eef1ec] p-1 w-fit">
+                    {([
+                      { k: "period", label: "نطاق: الفترة الحالية" },
+                      { k: "semester", label: "نطاق: الفصل الدراسي كامل" },
+                    ] as const).map((o) => (
+                      <button key={o.k} onClick={() => setMaScope(o.k)}
+                        className={`rounded-lg px-3 py-1.5 text-[0.7rem] font-extrabold transition ${maScope === o.k ? "bg-white text-[#0a4630] shadow" : "text-[#5c6f65]"}`}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
 
                   {/* مستويات الأداء */}
                   <div className="mt-3">

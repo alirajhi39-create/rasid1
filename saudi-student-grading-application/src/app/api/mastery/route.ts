@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // ============================================================
 //  تحليل الإتقان التربوي (المرحلة التأسيسية)
-//  مستويات الأداء + المهارات/الفاقد + المقارنات + أساس الإجراءات
+//  النطاق: period (فترة) أو semester (الفصل الدراسي = الفترتان)
 // ============================================================
 
 const PASS50 = 50;
@@ -21,8 +21,9 @@ const LEVELS = [
   { key: "support", label: "بحاجة إلى دعم / خطة علاجية", min: 0, color: "#b91c1c", bg: "#fee2e2" },
 ];
 const levelOf = (pct: number) => LEVELS.find((l) => pct >= l.min) ?? LEVELS[LEVELS.length - 1];
-
 const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+type GradeRow = { student_id: number; comp_id?: number; subject_id?: number; class_id?: number; value: number };
 
 export async function GET(req: Request) {
   try {
@@ -32,12 +33,23 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const subjectId = Number(url.searchParams.get("subjectId"));
     const classId = Number(url.searchParams.get("classId"));
+    const scope = url.searchParams.get("scope") === "semester" ? "semester" : "period";
     const semester = url.searchParams.get("semester") === "2" ? 2 : 1;
     const period = url.searchParams.get("period") === "2" ? 2 : 1;
     if (!subjectId || !classId) return Response.json({ ok: false, error: "المادة والفصل مطلوبان" }, { status: 400 });
 
-    // الفترة السابقة: (فترة 1 ← لا سابق)، (فترة 2 ← فترة 1 نفس الفصل)، (فصل 2 فترة 1 ← فصل 1 فترة 2)
-    const prev = period === 2 ? { semester, period: 1 } : semester === 2 ? { semester: 1, period: 2 } : null;
+    const cellFactor = scope === "semester" ? 2 : 1;
+    // نطاق الاستعلام الحالي
+    const curSel = scope === "semester" ? sql`g.semester = ${semester}` : sql`g.semester = ${semester} AND g.period = ${period}`;
+    // النطاق السابق للمقارنة
+    let prevSel: ReturnType<typeof sql> | null = null;
+    let prevLabel = "";
+    if (scope === "semester") {
+      if (semester === 2) { prevSel = sql`g.semester = 1`; prevLabel = "الفصل الدراسي الأول"; }
+    } else {
+      if (period === 2) { prevSel = sql`g.semester = ${semester} AND g.period = 1`; prevLabel = `الفصل ${semester} · الفترة 1`; }
+      else if (semester === 2) { prevSel = sql`g.semester = 1 AND g.period = 2`; prevLabel = "الفصل 1 · الفترة 2"; }
+    }
 
     // المادة والفصل (تحقق الملكية)
     const subj = await db.execute<{ id: number; name: string }>(sql`
@@ -50,38 +62,35 @@ export async function GET(req: Request) {
     const students = await db.execute<{ id: number; full_name: string; national_id: string; guardian_phone: string }>(sql`
       SELECT id, full_name, national_id, guardian_phone FROM students WHERE class_id = ${classId} ORDER BY full_name ASC`);
     const ids = students.rows.map((r) => Number(r.id));
-    if (ids.length === 0) return Response.json({ ok: true, subject: subj.rows[0], class: cls.rows[0], levels: LEVELS, students: [], boxes: [], subjectsCompare: [], classesCompare: [], periodCompare: null, maxTotal: 0, prev, semester, period });
-    const idList = ids.map((n) => Math.trunc(n)).join(",");
-
-    // خانات المادة المفعّلة
-    const boxes = await db.execute<{ id: number; name: string; category: string; max: number }>(sql`
+    const compQ = await db.execute<{ id: number; name: string; category: string; max: number }>(sql`
       SELECT id, name, category, max_score::float AS max FROM grade_components
       WHERE subject_id = ${subjectId} AND is_active = TRUE ORDER BY sort_order ASC, id ASC`);
-    const comps = boxes.rows.map((r) => ({ id: Number(r.id), name: String(r.name), category: String(r.category), max: num(r.max) }));
-    const maxTotal = comps.reduce((a, c) => a + c.max, 0);
+    const comps = compQ.rows.map((r) => ({ id: Number(r.id), name: String(r.name), category: String(r.category), max: num(r.max) }));
+    const compMaxSum = comps.reduce((a, c) => a + c.max, 0);
+    const maxTotal = compMaxSum * cellFactor;
+    if (ids.length === 0) return Response.json({ ok: true, subject: subj.rows[0], class: cls.rows[0], scope, levels: LEVELS, students: [], boxes: [], subjectsCompare: [], classesCompare: [], periodCompare: null, maxTotal, semester, period, prevLabel });
+    const idList = ids.map((n) => Math.trunc(n)).join(",");
 
-    // درجات المادة الحالية (لكل خانة)
-    const curGrades = await db.execute<{ student_id: number; comp_id: number; value: number }>(sql`
+    // ===== جلب الدرجات =====
+    const curGrades = await db.execute<GradeRow>(sql`
       SELECT g.student_id, gc.id AS comp_id, g.value::float AS value
       FROM grades g JOIN grade_components gc ON gc.id = g.component_id
       WHERE gc.subject_id = ${subjectId} AND g.student_id = ANY(ARRAY[${sql.raw(idList)}]::int[])
-        AND g.semester = ${semester} AND g.period = ${period} AND g.value IS NOT NULL`);
-    // درجات المادة السابقة (للمقارنة)
-    const prevGrades = prev
-      ? await db.execute<{ student_id: number; comp_id: number; value: number }>(sql`
+        AND ${curSel} AND g.value IS NOT NULL`);
+    const prevGrades = prevSel
+      ? await db.execute<GradeRow>(sql`
           SELECT g.student_id, gc.id AS comp_id, g.value::float AS value
           FROM grades g JOIN grade_components gc ON gc.id = g.component_id
           WHERE gc.subject_id = ${subjectId} AND g.student_id = ANY(ARRAY[${sql.raw(idList)}]::int[])
-            AND g.semester = ${prev.semester} AND g.period = ${prev.period} AND g.value IS NOT NULL`)
-      : { rows: [] as Array<{ student_id: number; comp_id: number; value: number }> };
-    // درجات كل مواد الفصل (للمقارنة بين المواد)
-    const allGrades = await db.execute<{ subject_id: number; student_id: number; value: number }>(sql`
+            AND ${prevSel} AND g.value IS NOT NULL`)
+      : { rows: [] as GradeRow[] };
+    const allGrades = await db.execute<GradeRow>(sql`
       SELECT s2.id AS subject_id, g.student_id, g.value::float AS value
       FROM grades g
       JOIN grade_components gc ON gc.id = g.component_id AND gc.is_active = TRUE
       JOIN subjects s2 ON s2.id = gc.subject_id AND s2.is_active = TRUE
       WHERE g.student_id = ANY(ARRAY[${sql.raw(idList)}]::int[])
-        AND g.semester = ${semester} AND g.period = ${period} AND g.value IS NOT NULL`);
+        AND ${curSel} AND g.value IS NOT NULL`);
     const subjMax = await db.execute<{ subject_id: number; name: string; max: number }>(sql`
       SELECT s.id AS subject_id, s.name, COALESCE(SUM(gc.max_score),0)::float AS max
       FROM subjects s
@@ -89,7 +98,6 @@ export async function GET(req: Request) {
       LEFT JOIN grade_components gc ON gc.subject_id = s.id AND gc.is_active = TRUE
       WHERE s.teacher_id = ${session.sub} AND s.is_active = TRUE
       GROUP BY s.id, s.name ORDER BY s.sort_order ASC`);
-    // فصول المادة (للمقارنة بين الفصول/الشعب)
     const subjClasses = await db.execute<{ id: number; name: string; grade_label: string; cnt: number }>(sql`
       SELECT c.id, c.name, c.grade_label, COUNT(st.id)::int AS cnt
       FROM classes c
@@ -97,59 +105,67 @@ export async function GET(req: Request) {
       LEFT JOIN students st ON st.class_id = c.id
       WHERE c.teacher_id = ${session.sub}
       GROUP BY c.id, c.name, c.grade_label ORDER BY c.sort_order ASC, c.id ASC`);
-    const subjClassGrades = await db.execute<{ class_id: number; student_id: number; value: number }>(sql`
+    const subjClassGrades = await db.execute<GradeRow>(sql`
       SELECT c.id AS class_id, g.student_id, g.value::float AS value
       FROM grades g
       JOIN grade_components gc ON gc.id = g.component_id AND gc.is_active = TRUE
       JOIN subjects s ON s.id = gc.subject_id AND s.id = ${subjectId}
       JOIN students st ON st.id = g.student_id
       JOIN classes c ON c.id = st.class_id AND c.teacher_id = ${session.sub}
-      WHERE g.semester = ${semester} AND g.period = ${period} AND g.value IS NOT NULL`);
+      WHERE ${curSel} AND g.value IS NOT NULL`);
 
-    // ===== تجميع: لكل طالب في المادة الحالية =====
-    type Acc = { total: number; byBox: Map<number, number> };
-    const cur = new Map<number, Acc>();
-    for (const g of curGrades.rows as Array<{ student_id: number; comp_id: number; value: number }>) {
-      const a = cur.get(g.student_id) ?? { total: 0, byBox: new Map<number, number>() };
-      a.total += g.value; a.byBox.set(g.comp_id, g.value);
-      cur.set(g.student_id, a);
+    // ===== تجميع: للمادة الحالية والسابقة =====
+    const curTotal = new Map<number, number>();
+    const curByBox = new Map<number, Map<number, number>>(); // studentId -> compId -> total
+    const curGradeVals = new Map<number, number[]>(); // compId -> [values]
+    for (const g of curGrades.rows) {
+      curTotal.set(g.student_id, (curTotal.get(g.student_id) ?? 0) + g.value);
+      let m = curByBox.get(g.student_id); if (!m) { m = new Map(); curByBox.set(g.student_id, m); }
+      m.set(g.comp_id!, (m.get(g.comp_id!) ?? 0) + g.value);
+      let arr = curGradeVals.get(g.comp_id!); if (!arr) { arr = []; curGradeVals.set(g.comp_id!, arr); }
+      arr.push(g.value);
     }
-    const prevAcc = new Map<number, number>();
-    for (const g of prevGrades.rows as Array<{ student_id: number; comp_id: number; value: number }>) {
-      prevAcc.set(g.student_id, (prevAcc.get(g.student_id) ?? 0) + g.value);
-    }
-
-    // خرائط الخانات (حالياً/سابقاً) لكل طالب
-    const curByBox = (sid: number) => cur.get(sid)?.byBox ?? new Map<number, number>();
+    const prevTotal = new Map<number, number>();
     const prevByBox = new Map<number, Map<number, number>>();
-    for (const g of prevGrades.rows as Array<{ student_id: number; comp_id: number; value: number }>) {
-      const m = prevByBox.get(g.student_id) ?? new Map<number, number>();
-      m.set(g.comp_id, g.value); prevByBox.set(g.student_id, m);
+    for (const g of prevGrades.rows) {
+      prevTotal.set(g.student_id, (prevTotal.get(g.student_id) ?? 0) + g.value);
+      let m = prevByBox.get(g.student_id); if (!m) { m = new Map(); prevByBox.set(g.student_id, m); }
+      m.set(g.comp_id!, (m.get(g.comp_id!) ?? 0) + g.value);
+    }
+    const subjStudentTotal = new Map<number, Map<number, number>>();
+    for (const g of allGrades.rows) {
+      let m = subjStudentTotal.get(g.subject_id!); if (!m) { m = new Map(); subjStudentTotal.set(g.subject_id!, m); }
+      m.set(g.student_id, (m.get(g.student_id) ?? 0) + g.value);
+    }
+    const clsStudentTotal = new Map<number, Map<number, number>>();
+    for (const g of subjClassGrades.rows) {
+      let m = clsStudentTotal.get(g.class_id!); if (!m) { m = new Map(); clsStudentTotal.set(g.class_id!, m); }
+      m.set(g.student_id, (m.get(g.student_id) ?? 0) + g.value);
     }
 
     // ===== الطلاب =====
     const studentsOut = students.rows.map((st) => {
       const sid = Number(st.id);
-      const acc = cur.get(sid);
-      const total = acc?.total ?? 0;
-      const filled = acc ? acc.byBox.size : 0;
-      const complete = filled === comps.length && comps.length > 0;
+      const total = curTotal.get(sid) ?? 0;
+      const byBox = curByBox.get(sid) ?? new Map<number, number>();
+      const filled = byBox.size;
+      const complete = comps.length > 0 && filled === comps.length;
       const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
       const lvl = levelOf(pct);
-      const weak: string[] = [];
-      const strong: string[] = [];
+      const weak: string[] = []; const strong: string[] = [];
+      const boxMaxScope = (c: { max: number }) => c.max * cellFactor;
       for (const c of comps) {
-        const score = acc?.byBox.get(c.id) ?? null;
-        if (score === null || c.max <= 0) continue;
-        const r = score / c.max;
+        const score = byBox.get(c.id);
+        if (score === undefined || boxMaxScope(c) <= 0) continue;
+        const r = score / boxMaxScope(c);
         if (r < MASTERY60 / 100) weak.push(c.name);
         else if (r >= 0.8) strong.push(c.name);
       }
-      const prevPct = prev && maxTotal > 0 ? ((prevAcc.get(sid) ?? 0) / maxTotal) * 100 : null;
-      const delta = prevPct !== null && filled > 0 ? Math.round((pct - prevPct) * 10) / 10 : null;
+      const prevPct = prevSel && maxTotal > 0 ? ((prevTotal.get(sid) ?? 0) / maxTotal) * 100 : null;
+      const delta = prevSel !== null && prevPct !== null && filled > 0 ? Math.round((pct - prevPct) * 10) / 10 : null;
       return {
         id: sid, name: String(st.full_name), nationalId: String(st.national_id ?? ""), guardianPhone: String(st.guardian_phone ?? ""),
-        total, filled, complete, pct: Math.round(pct * 10) / 10,
+        total: Math.round(total * 10) / 10, filled, complete, pct: Math.round(pct * 10) / 10,
         levelKey: lvl.key, levelLabel: lvl.label, levelColor: lvl.color, levelBg: lvl.bg,
         weak, strong, prevPct: prevPct !== null ? Math.round(prevPct * 10) / 10 : null, delta,
       };
@@ -164,45 +180,42 @@ export async function GET(req: Request) {
 
     // ===== الخانات (مهارات) =====
     const boxesOut = comps.map((c) => {
-      const curVals: number[] = [];
-      for (const st of students.rows) { const v = cur.get(Number(st.id))?.byBox.get(c.id); if (v !== undefined) curVals.push(v); }
-      const prevVals: number[] = [];
-      for (const st of students.rows) { const v = prevByBox.get(Number(st.id))?.get(c.id); if (v !== undefined) prevVals.push(v); }
-      const n = curVals.length;
-      const avg = n ? curVals.reduce((a, b) => a + b, 0) / n : 0;
-      const mastery = n && c.max > 0 ? (curVals.filter((v) => v / c.max >= MASTERY60 / 100).length / n) * 100 : 0;
-      const pass50 = n && c.max > 0 ? (curVals.filter((v) => v / c.max >= PASS50 / 100).length / n) * 100 : 0;
-      const prevMastery = prevVals.length && c.max > 0 ? (prevVals.filter((v) => v / c.max >= MASTERY60 / 100).length / prevVals.length) * 100 : null;
+      const boxMaxScope = c.max * cellFactor;
+      let studentsWithBox = 0, mastered = 0, pass50 = 0, prevMastered = 0, prevStudents = 0;
+      const vals = curGradeVals.get(c.id) ?? [];
+      for (const st of students.rows) {
+        const sid = Number(st.id);
+        const tot = curByBox.get(sid)?.get(c.id);
+        if (tot !== undefined && boxMaxScope > 0) {
+          studentsWithBox++;
+          if (tot / boxMaxScope >= MASTERY60 / 100) mastered++;
+          if (tot / boxMaxScope >= PASS50 / 100) pass50++;
+        }
+        const ptot = prevByBox.get(sid)?.get(c.id);
+        if (ptot !== undefined && boxMaxScope > 0) { prevStudents++; if (ptot / boxMaxScope >= MASTERY60 / 100) prevMastered++; }
+      }
+      const mastery = studentsWithBox ? Math.round((mastered / studentsWithBox) * 100) : 0;
+      const pass50r = studentsWithBox ? Math.round((pass50 / studentsWithBox) * 100) : 0;
+      const prevMastery = prevSel && prevStudents ? Math.round((prevMastered / prevStudents) * 100) : null;
+      const avg = vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : 0;
       const status = mastery >= 80 ? "mastered" : mastery >= 60 ? "attention" : "gap";
-      return { id: c.id, name: c.name, category: c.category, max: c.max, avg: Math.round(avg * 10) / 10, mastery: Math.round(mastery), pass50: Math.round(pass50), prevMastery: prevMastery !== null ? Math.round(prevMastery) : null, status, filled: n };
+      return { id: c.id, name: c.name, category: c.category, max: c.max, avg, mastery, pass50: pass50r, prevMastery, status, filled: studentsWithBox };
     });
 
-    // ===== مقارنة المواد (في هذا الفصل، الفترة الحالية) =====
-    const subjTotals = new Map<number, Map<number, number>>();
-    for (const g of allGrades.rows as Array<{ subject_id: number; student_id: number; value: number }>) {
-      const m = subjTotals.get(g.subject_id) ?? new Map<number, number>();
-      m.set(g.student_id, (m.get(g.student_id) ?? 0) + g.value);
-      subjTotals.set(g.subject_id, m);
-    }
+    // ===== مقارنة المواد (في هذا الفصل، النطاق الحالي) =====
     const subjectsCompare = subjMax.rows.map((r) => {
-      const sid = Number(r.subject_id); const smax = num(r.max);
-      const m = subjTotals.get(sid);
+      const sid = Number(r.subject_id); const smax = num(r.max) * cellFactor;
+      const m = subjStudentTotal.get(sid);
       const pcts: number[] = [];
-      if (m && smax > 0) for (const [sid2, tot] of m) pcts.push((tot / smax) * 100);
+      if (m && smax > 0) for (const [, tot] of m) pcts.push((tot / smax) * 100);
       const avg = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
       const pass50r = pcts.length ? (pcts.filter((p) => p >= PASS50).length / pcts.length) * 100 : 0;
       return { id: sid, name: String(r.name), isCurrent: sid === subjectId, studentCount: pcts.length, avgPct: Math.round(avg * 10) / 10, passRate50: Math.round(pass50r) };
     });
 
     // ===== مقارنة الفصول/الشعب (هذه المادة) =====
-    const clsTotals = new Map<number, Map<number, number>>();
-    for (const g of subjClassGrades.rows as Array<{ class_id: number; student_id: number; value: number }>) {
-      const m = clsTotals.get(g.class_id) ?? new Map<number, number>();
-      m.set(g.student_id, (m.get(g.student_id) ?? 0) + g.value);
-      clsTotals.set(g.class_id, m);
-    }
     const classesCompare = subjClasses.rows.map((r) => {
-      const cid = Number(r.id); const m = clsTotals.get(cid);
+      const cid = Number(r.id); const m = clsStudentTotal.get(cid);
       const pcts: number[] = [];
       if (m && maxTotal > 0) for (const [, tot] of m) pcts.push((tot / maxTotal) * 100);
       const avg = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
@@ -210,27 +223,28 @@ export async function GET(req: Request) {
       return { id: cid, name: String(r.name), gradeLabel: String(r.grade_label), isCurrent: cid === classId, studentCount: Number(r.cnt), avgPct: Math.round(avg * 10) / 10, passRate50: Math.round(pass50r) };
     });
 
-    // ===== مقارنة الفترة الحالية بالسابقة =====
+    // ===== مقارنة النطاق الحالي بالسابق =====
     let periodCompare = null;
-    if (prev) {
+    if (prevSel) {
       const curPcts = gradedStudents.map((s) => s.pct);
       const prevPctVals: number[] = [];
-      for (const st of students.rows) { const v = prevAcc.get(Number(st.id)); if (v) prevPctVals.push((v / maxTotal) * 100); }
+      for (const st of students.rows) { const v = prevTotal.get(Number(st.id)); if (v) prevPctVals.push((v / maxTotal) * 100); }
       const curAvg = curPcts.length ? curPcts.reduce((a, b) => a + b, 0) / curPcts.length : 0;
       const prevAvg = prevPctVals.length ? prevPctVals.reduce((a, b) => a + b, 0) / prevPctVals.length : 0;
       let improved = 0, declined = 0, unchanged = 0;
       for (const s of studentsOut) { if (s.delta !== null) { if (s.delta > 0.5) improved++; else if (s.delta < -0.5) declined++; else unchanged++; } }
       periodCompare = {
         exists: prevPctVals.length > 0,
-        prevLabel: `الفصل ${prev.semester} · الفترة ${prev.period}`,
-        curLabel: `الفصل ${semester} · الفترة ${period}`,
+        scope,
+        prevLabel,
+        curLabel: scope === "semester" ? `الفصل الدراسي ${semester}` : `الفصل ${semester} · الفترة ${period}`,
         curAvg: Math.round(curAvg * 10) / 10, prevAvg: Math.round(prevAvg * 10) / 10,
         delta: Math.round((curAvg - prevAvg) * 10) / 10, improved, declined, unchanged,
       };
     }
 
     return Response.json({
-      ok: true, subject: subj.rows[0], class: cls.rows[0], semester, period, prev,
+      ok: true, subject: subj.rows[0], class: cls.rows[0], scope, semester, period, prevLabel,
       levels: levelsOut, students: studentsOut, boxes: boxesOut,
       subjectsCompare, classesCompare, periodCompare, maxTotal,
     });

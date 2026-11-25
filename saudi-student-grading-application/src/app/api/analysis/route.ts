@@ -24,7 +24,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const subjectId = Number(url.searchParams.get("subjectId"));
     const classIdParam = url.searchParams.get("classId");
-    const scope = url.searchParams.get("scope") === "year" ? "year" : "period";
+    const scopeRaw = url.searchParams.get("scope");
+    const scope = scopeRaw === "year" ? "year" : scopeRaw === "semester" ? "semester" : "period";
     const semester = url.searchParams.get("semester") === "2" ? 2 : 1;
     const period = url.searchParams.get("period") === "2" ? 2 : 1;
     if (!subjectId) return Response.json({ ok: false, error: "المادة مطلوبة" }, { status: 400 });
@@ -41,10 +42,16 @@ export async function GET(req: Request) {
     const comps = components.rows as Array<{ id: number; name: string; category: string; max_score: number }>;
     if (comps.length === 0) return Response.json({ ok: true, subject: subj.rows[0], scope, semester, period, compMax: 0, classes: [] });
     const compMax = comps.reduce((a, c) => a + Number(c.max_score), 0);
-    // العام = 4 خلايا لكل خانة (فصلان × فترتان)
-    const cellFactor = scope === "year" ? 4 : 1;
+    // عدد الخلايا لكل خانة: الفترة = 1، الفصل الدراسي = 2، العام = 4
+    const cellFactor = scope === "year" ? 4 : scope === "semester" ? 2 : 1;
     const totalCellsPerStudent = comps.length * cellFactor;
     const maxForPct = compMax * cellFactor;
+    // نطاق الاستعلام حسب النطاق المحدد
+    const scopeSel = scope === "year"
+      ? sql`g.semester IN (1,2) AND g.period IN (1,2)`
+      : scope === "semester"
+        ? sql`g.semester = ${semester}`
+        : sql`g.semester = ${semester} AND g.period = ${period}`;
 
     const classes = await db.execute<{ id: number; name: string; grade_label: string }>(sql`
       SELECT c.id, c.name, c.grade_label FROM classes c
@@ -73,15 +80,12 @@ export async function GET(req: Request) {
       if (ids.length === 0) continue;
       const idList = ids.map((n) => Math.trunc(n)).join(",");
 
-      const scopeFilter = scope === "year"
-        ? sql`AND g.semester IN (1,2) AND g.period IN (1,2)`
-        : sql`AND g.semester = ${semester} AND g.period = ${period}`;
       const gradesRows = await db.execute(sql`
         SELECT g.student_id, g.component_id, g.value::float AS value FROM grades g
         WHERE g.student_id = ANY(ARRAY[${sql.raw(idList)}]::int[])
           AND g.component_id IN (SELECT unnest(ARRAY[${sql.raw(compList)}]::int[]))
           AND g.value IS NOT NULL
-          ${scopeFilter}
+          AND ${scopeSel}
       `);
 
       // تجميع: لكل طالب [المجموع، عدد الخلايا المعبأة]؛ ولكل خانة قائمة القيم
