@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   FileText, Printer, FileSpreadsheet, Loader2, Table2, UserRound,
-  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle, Smartphone,
+  BarChart3, AlertCircle, Download, CalendarRange, Sigma, RectangleHorizontal, RectangleVertical, Medal, Info, Columns3, MessageCircle, Smartphone, ClipboardList, TrendingUp, TrendingDown, Target, Users, BookOpen, Home, Wrench,
 } from "lucide-react";
 import { toast } from "@/components/AppShell";
 import { buildWaMessage, openWhatsApp, waLink, channelLink, renderTemplate, WA_DEFAULT_TEMPLATE, WA_PLACEHOLDERS, type WaChannel } from "@/lib/whatsapp";
@@ -28,7 +28,7 @@ type YearRow = {
   sem1: number; sem2: number; yearTotal: number; avg: number; percent: number;
   semMax: number; yearMax: number;
 };
-type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1" | "wa";
+type TabKey = "sheet" | "notices" | "analysis" | "year" | "sem1" | "wa" | "mastery";
 
 const SEMESTERS: Record<string, string> = { "1": "الفصل الدراسي الأول", "2": "الفصل الدراسي الثاني" };
 const PERIODS: Record<string, string> = { "1": "الفترة الأولى", "2": "الفترة الثانية" };
@@ -68,6 +68,7 @@ function ReportsInner() {
   const [exporting, setExporting] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [anScope, setAnScope] = useState<"period" | "year">("period");
+  const [mastery, setMastery] = useState<any>(null);
   // ===== الإرسال الجماعي عبر واتساب =====
   const [waTemplate, setWaTemplate] = useState<string>(() => {
     try { return localStorage.getItem("rased-wa-template") || ""; } catch { return ""; }
@@ -170,6 +171,15 @@ function ReportsInner() {
       .then((d) => { if (d.ok) setAnalysis(d); })
       .catch(() => setAnalysis(null));
   }, [subjectId, tab, semester, period, anScope]);
+
+  // بيانات تحليل الإتقان والإجراءات التربوية
+  useEffect(() => {
+    if (!subjectId || !classId || tab !== "mastery") { setMastery(null); return; }
+    fetch(`/api/mastery?subjectId=${subjectId}&classId=${classId}&semester=${semester}&period=${period}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setMastery(d); })
+      .catch(() => setMastery(null));
+  }, [subjectId, classId, semester, period, tab]);
 
   const maxTotal = useMemo(() => components.reduce((a, c) => a + Number(c.max_score), 0), [components]);
   const passScore = subject ? Number(subject.pass_score) : 50;
@@ -281,6 +291,40 @@ function ReportsInner() {
   };
   const waStop = () => { setWaQueue([]); setWaQi(0); };
 
+  // ===== الإجراءات التربوية وتغذية راجعة الأسرة =====
+  const remedialAction = (st: any) => {
+    const base = st.levelKey === "support"
+      ? "خطة علاجية عاجلة: إعادة تدريس المهارات التأسيسية عبر أنشطة مبسطة وأوراق عمل مركّزة، ومتابعة فردية أو في مجموعات صغيرة."
+      : "خطة متابعة: مراجعة المهارات غير المتقنة بتدريبات مركّزة، ومتابعة فردية أو في مجموعات صغيرة.";
+    return st.weak?.length ? `${base} التركيز على: ${st.weak.join("، ")}.` : base;
+  };
+  const enrichAction = (st: any) =>
+    st.levelKey === "excellent"
+      ? "خطة إثرائية: مهام ومشاريع تفكير أعلى، وإعداده ليكون مرشداً أقرانياً لدعم زميل متعثر."
+      : "إثراء: أنشطة تمديدية وأسئلة محفّزة تنمّي قدراته وتحافظ على دافعيته.";
+  const teachingAction = (bx: any) =>
+    `المهارة «${bx.name}» أظهرت تعثراً جماعياً (إتقان ${bx.mastery}%، اجتياز ${bx.pass50}%). الإجراء: مراجعة طريقة الشرح، وتنويع أدوات التقويم التكويني، وإعادة تدريس المهارة عبر نشاط موجّه.`;
+  const familyMessage = (st: any) => [
+    `أهلاً، ولي أمر الطالب/ة ${st.name}`,
+    `${teacher?.school_name ?? ""}`,
+    `المادة: ${subject?.name ?? ""} — ${classLabel}`,
+    `الفترة: ${axisLabel}`,
+    "--------------------------",
+    `مستوى الأداء: ${st.levelLabel}`,
+    `الدرجة: ${st.total} من ${maxTotal} (${st.pct}%)`,
+    st.strong?.length ? `نقاط القوة: ${st.strong.join("، ")}` : "",
+    st.weak?.length ? `ما يحتاج تركيزاً في المنزل: ${st.weak.join("، ")}` : "",
+    st.levelKey === "support" || st.levelKey === "follow" ? `التوصية: ${remedialAction(st)}` : `التوصية: ${enrichAction(st)}`,
+    "--------------------------",
+    `مع خالص التحية — ${teacher?.full_name ?? ""}`,
+  ].filter(Boolean).join("\n");
+  const sendFamily = (st: any) => {
+    const link = channelLink(waChannel, st.guardianPhone ?? "", familyMessage(st));
+    if (!link) { toast("لا يوجد رقم جوال مسجّل لولي أمر هذا الطالب", "error"); return; }
+    window.open(link, "_blank", "noopener,noreferrer");
+    toast("فُتحت الرسالة في واتساب — راجعها وأرسلها");
+  };
+
   const passingYear = yearRows.filter((r) => r.avg >= passScore).length;
   const gradedYear = yearRows.filter((r) => r.yearTotal > 0).length;
   const yearAvg = yearRows.length ? yearRows.reduce((a, r) => a + r.percent, 0) / yearRows.length : 0;
@@ -348,6 +392,7 @@ function ReportsInner() {
     { key: "sheet", label: "كشف الرصد الرسمي", icon: Table2 },
     { key: "notices", label: "الإشعارات الفردية", icon: UserRound },
     { key: "analysis", label: "تحليل النتائج", icon: BarChart3 },
+    { key: "mastery", label: "تحليل الإتقان والإجراءات", icon: ClipboardList },
     { key: "sem1", label: "ملخص الفصل الأول", icon: Medal },
     { key: "year", label: "نهاية العام", icon: Sigma },
     { key: "wa", label: "إرسال واتساب جماعي", icon: MessageCircle },
@@ -687,10 +732,13 @@ function ReportsInner() {
                       <div className="mb-1.5 text-[0.72rem] font-black text-[#0a4630]">تحليل الخانات (البند × البند)</div>
                       <table className="sheet-table">
                         <thead>
-                          <tr><th style={{ textAlign: "right" }}>الخانة</th><th>النوع</th><th>العظمى</th><th>المتوسط</th><th>أعلى</th><th>أدنى</th><th>الإتقان ≥ 60%</th></tr>
+                          <tr><th style={{ textAlign: "right" }}>الخانة</th><th>النوع</th><th>العظمى</th><th>المتوسط</th><th>أعلى</th><th>أدنى</th><th>الإتقان ≥ 60%</th><th>الاجتياز ≥ 50%</th><th>الحالة</th></tr>
                         </thead>
                         <tbody>
-                          {cur.components.map((c: any) => (
+                          {cur.components.map((c: any) => {
+                            const m = c.mastery || 0;
+                            const status = m >= 80 ? { t: "مُتقنة", bg: "#d1fae5", fg: "#065f46" } : m >= 60 ? { t: "تحتاج انتباهاً", bg: "#fef3c7", fg: "#92400e" } : { t: "فاقد تعليمي", bg: "#fee2e2", fg: "#991b1b" };
+                            return (
                             <tr key={c.id}>
                               <td style={{ textAlign: "right", fontWeight: 700 }}>{c.name}</td>
                               <td><span className="band-chip" style={{
@@ -701,9 +749,12 @@ function ReportsInner() {
                               <td style={{ fontWeight: 800 }}>{c.filled ? c.avg.toFixed(1) : "—"}</td>
                               <td>{c.filled ? fmt(c.top) : "—"}</td>
                               <td>{c.filled ? fmt(c.low) : "—"}</td>
-                              <td>{c.filled ? `${c.mastery.toFixed(0)}%` : "—"}</td>
+                              <td style={{ fontWeight: 800, color: m >= 60 ? "#0f766e" : "#b91c1c" }}>{c.filled ? `${m.toFixed(0)}%` : "—"}</td>
+                              <td>{c.filled ? `${(c.pass50 || 0).toFixed(0)}%` : "—"}</td>
+                              <td>{c.filled ? <span className="band-chip" style={{ background: status.bg, color: status.fg }}>{status.t}</span> : "—"}</td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -913,6 +964,197 @@ function ReportsInner() {
                 * درجة كل فترة من {fmt(yearPeriodMax)} · مجموع الفترتين (الفصل) من {fmt(yearPeriodMax * 2)} · متوسط الفترتين من {fmt(yearPeriodMax)} · مجموع الفصلين من {fmt(yearPeriodMax * 4)} · متوسط الفصلين من {fmt(yearPeriodMax * 2)} · المتوسط العام من {fmt(yearPeriodMax)} · التقدير حسب المتوسط العام ({passScore} درجة للنجاح).
               </p>
               <SignatureRow teacher={teacher} />
+            </div>
+          )}
+
+          {/* ===== تحليل الإتقان والإجراءات التربوية ===== */}
+          {tab === "mastery" && (
+            <div className={`print-sheet ${orientation === "portrait" ? "portrait" : ""}`}>
+              {!mastery ? (
+                <div className="py-10"><div className="shimmer mx-auto h-64 max-w-3xl rounded-3xl" /></div>
+              ) : (
+                <>
+                  <SheetHeader teacher={teacher} subjectName={mastery.subject?.name ?? ""} classLabel={`${mastery.class?.grade_label ?? ""} — فصل ${mastery.class?.name ?? ""}`} today={today}
+                    docTitle={`تحليل الإتقان والإجراءات التربوية — مادة ${mastery.subject?.name ?? ""}`} axisLabel={axisLabel} />
+
+                  {/* مستويات الأداء */}
+                  <div className="mt-3">
+                    <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><Target size={14} /> توزيع مستويات الأداء</div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      {mastery.levels.map((l: any) => (
+                        <div key={l.key} className="rounded-2xl border p-2.5 text-center" style={{ background: l.bg, borderColor: l.color + "55" }}>
+                          <div className="text-2xl font-black tabular-nums" style={{ color: l.color }}>{l.count}</div>
+                          <div className="text-[0.6rem] font-extrabold" style={{ color: l.color }}>{l.label}</div>
+                          <div className="text-[0.55rem] font-bold text-[#5c6f65]">{l.pct}%</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* مقارنة الفترة الحالية بالسابقة */}
+                  {mastery.periodCompare?.exists && (
+                    <div className="mt-3 rounded-2xl border border-[#eef0ea] bg-[#fbfbf8] p-3">
+                      <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><TrendingUp size={14} /> متابعة المسار: مقارنة {mastery.periodCompare.curLabel} بـ {mastery.periodCompare.prevLabel}</div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-xl bg-white p-2 text-center ring-1 ring-[#eef0ea]"><div className="text-lg font-black text-[#0a4630]">{mastery.periodCompare.prevAvg}%</div><div className="text-[0.55rem] font-bold text-[#8a968d]">الفترة السابقة</div></div>
+                        <div className="rounded-xl bg-white p-2 text-center ring-1 ring-[#eef0ea]"><div className="text-lg font-black text-[#0a4630]">{mastery.periodCompare.curAvg}%</div><div className="text-[0.55rem] font-bold text-[#8a968d]">الفترة الحالية</div></div>
+                        <div className="rounded-xl p-2 text-center" style={{ background: mastery.periodCompare.delta >= 0 ? "#d1fae5" : "#fee2e2" }}>
+                          <div className="flex items-center justify-center gap-1 text-lg font-black" style={{ color: mastery.periodCompare.delta >= 0 ? "#047857" : "#b91c1c" }}>
+                            {mastery.periodCompare.delta >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                            {mastery.periodCompare.delta > 0 ? "+" : ""}{mastery.periodCompare.delta}%
+                          </div>
+                          <div className="text-[0.55rem] font-bold text-[#5c6f65]">{mastery.periodCompare.delta >= 0 ? "تحسّن" : "تراجع"}</div>
+                        </div>
+                        <div className="rounded-xl bg-white p-2 text-center ring-1 ring-[#eef0ea]">
+                          <div className="text-[0.62rem] font-bold leading-tight text-[#0a4630]">{mastery.periodCompare.improved} تحسّن · {mastery.periodCompare.declined} تراجع · {mastery.periodCompare.unchanged} ثابت</div>
+                          <div className="text-[0.5rem] font-bold text-[#8a968d]">مسار الطلاب</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* المهارات والفاقد التعليمي */}
+                  <div className="mt-3">
+                    <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><BookOpen size={14} /> تحليل المهارات والفاقد التعليمي</div>
+                    <table className="sheet-table">
+                      <thead>
+                        <tr><th style={{ textAlign: "right" }}>المهارة/الخانة</th><th>النوع</th><th>العظمى</th><th>المتوسط</th><th>الإتقان ≥ 60%</th><th>الاجتياز ≥ 50%</th><th>إتقان سابق</th><th>الحالة</th></tr>
+                      </thead>
+                      <tbody>
+                        {[...mastery.boxes].sort((a: any, b: any) => a.mastery - b.mastery).map((bx: any) => (
+                          <tr key={bx.id} style={bx.status === "gap" ? { background: "#fdf1f1" } : undefined}>
+                            <td style={{ textAlign: "right", fontWeight: 700 }}>{bx.name}</td>
+                            <td style={{ color: bx.category === "performance" ? "#0f766e" : bx.category === "written_oral" ? "#a21caf" : "#3730a3", fontWeight: 700 }}>{bx.category === "performance" ? "أدائية" : bx.category === "written_oral" ? "تحريري/شفوي" : "تحريرية"}</td>
+                            <td>{fmt(bx.max)}</td>
+                            <td style={{ fontWeight: 800 }}>{bx.filled ? bx.avg.toFixed(1) : "—"}</td>
+                            <td style={{ fontWeight: 800, color: bx.mastery >= 60 ? "#0f766e" : "#b91c1c" }}>{bx.filled ? `${bx.mastery}%` : "—"}</td>
+                            <td>{bx.filled ? `${bx.pass50}%` : "—"}</td>
+                            <td>{bx.prevMastery !== null ? `${bx.prevMastery}%` : "—"}</td>
+                            <td><span className="band-chip" style={{
+                              background: bx.status === "mastered" ? "#d1fae5" : bx.status === "attention" ? "#fef3c7" : "#fee2e2",
+                              color: bx.status === "mastered" ? "#065f46" : bx.status === "attention" ? "#92400e" : "#991b1b"
+                            }}>{bx.status === "mastered" ? "مُتقنة" : bx.status === "attention" ? "تحتاج انتباهاً" : "فاقد تعليمي"}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* مقارنة المواد والفصول */}
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><Users size={14} /> مقارنة المواد — {mastery.class?.grade_label} فصل {mastery.class?.name}</div>
+                      <table className="sheet-table">
+                        <thead><tr><th style={{ textAlign: "right" }}>المادة</th><th>المتوسط</th><th>الاجتياز ≥ 50%</th></tr></thead>
+                        <tbody>
+                          {mastery.subjectsCompare.map((s: any) => (
+                            <tr key={s.id} style={s.isCurrent ? { background: "#f6f8f3", fontWeight: 800 } : undefined}>
+                              <td style={{ textAlign: "right", fontWeight: 700 }}>{s.name}{s.isCurrent ? " (الحالية)" : ""}</td>
+                              <td>{s.studentCount ? `${s.avgPct}%` : "—"}</td>
+                              <td>{s.studentCount ? `${s.passRate50}%` : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div>
+                      <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><ClipboardList size={14} /> مقارنة الفصول/الشعب — مادة {mastery.subject?.name}</div>
+                      <table className="sheet-table">
+                        <thead><tr><th style={{ textAlign: "right" }}>الفصل</th><th>الطلاب</th><th>المتوسط</th><th>الاجتياز ≥ 50%</th></tr></thead>
+                        <tbody>
+                          {mastery.classesCompare.map((c: any) => (
+                            <tr key={c.id} style={c.isCurrent ? { background: "#f6f8f3", fontWeight: 800 } : undefined}>
+                              <td style={{ textAlign: "right", fontWeight: 700 }}>{c.gradeLabel} — {c.name}{c.isCurrent ? " (الحالي)" : ""}</td>
+                              <td>{c.studentCount}</td>
+                              <td>{c.studentCount ? `${c.avgPct}%` : "—"}</td>
+                              <td>{c.studentCount ? `${c.passRate50}%` : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* الإجراءات التربوية */}
+                  <div className="mt-3">
+                    <div className="mb-1.5 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><Wrench size={14} /> الإجراءات التربوية المطلوبة</div>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {/* خطط علاجية */}
+                      <div className="rounded-2xl border border-red-200 bg-red-50/50 p-3">
+                        <div className="mb-2 flex items-center justify-between text-[0.7rem] font-black text-red-800">
+                          <span>خطط علاجية ومتابعة</span><span className="rounded-full bg-red-100 px-2 py-0.5">{mastery.students.filter((s: any) => s.levelKey === "support" || s.levelKey === "follow").length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {mastery.students.filter((s: any) => s.levelKey === "support" || s.levelKey === "follow").map((st: any) => (
+                            <div key={st.id} className="rounded-xl bg-white p-2.5 ring-1 ring-red-100">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[0.72rem] font-extrabold text-[#22332a]">{st.name}</span>
+                                <span className="band-chip" style={{ background: st.levelBg, color: st.levelColor }}>{st.levelLabel}</span>
+                              </div>
+                              <p className="mt-1 text-[0.6rem] font-semibold leading-relaxed text-[#5c6f65]">{remedialAction(st)}</p>
+                              <button onClick={() => sendFamily(st)} className="no-print mt-1.5 inline-flex items-center gap-1 rounded-lg bg-[#25d366] px-2 py-1 text-[0.58rem] font-extrabold text-white transition hover:bg-[#1da851]"><MessageCircle size={11} /> تغذية راجعة للأسرة</button>
+                            </div>
+                          ))}
+                          {mastery.students.filter((s: any) => s.levelKey === "support" || s.levelKey === "follow").length === 0 && <p className="py-3 text-center text-[0.62rem] font-bold text-[#8a968d]">لا يوجد طلاب بحاجة إلى خطة علاجية 🎉</p>}
+                        </div>
+                      </div>
+                      {/* خطط إثرائية */}
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3">
+                        <div className="mb-2 flex items-center justify-between text-[0.7rem] font-black text-emerald-800">
+                          <span>خطط إثرائية للمتفوقين</span><span className="rounded-full bg-emerald-100 px-2 py-0.5">{mastery.students.filter((s: any) => s.levelKey === "excellent" || s.levelKey === "veryGood").length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {mastery.students.filter((s: any) => s.levelKey === "excellent" || s.levelKey === "veryGood").map((st: any) => (
+                            <div key={st.id} className="rounded-xl bg-white p-2.5 ring-1 ring-emerald-100">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[0.72rem] font-extrabold text-[#22332a]">{st.name}</span>
+                                <span className="band-chip" style={{ background: st.levelBg, color: st.levelColor }}>{st.levelLabel}</span>
+                              </div>
+                              <p className="mt-1 text-[0.6rem] font-semibold leading-relaxed text-[#5c6f65]">{enrichAction(st)}</p>
+                              <button onClick={() => sendFamily(st)} className="no-print mt-1.5 inline-flex items-center gap-1 rounded-lg bg-[#25d366] px-2 py-1 text-[0.58rem] font-extrabold text-white transition hover:bg-[#1da851]"><MessageCircle size={11} /> تغذية راجعة للأسرة</button>
+                            </div>
+                          ))}
+                          {mastery.students.filter((s: any) => s.levelKey === "excellent" || s.levelKey === "veryGood").length === 0 && <p className="py-3 text-center text-[0.62rem] font-bold text-[#8a968d]">لا يوجد متفوقون حالياً</p>}
+                        </div>
+                      </div>
+                      {/* تعديل أساليب التدريس */}
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-3">
+                        <div className="mb-2 flex items-center justify-between text-[0.7rem] font-black text-amber-800">
+                          <span>تعديل أساليب التدريس والتقويم</span><span className="rounded-full bg-amber-100 px-2 py-0.5">{mastery.boxes.filter((b: any) => b.status !== "mastered").length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {mastery.boxes.filter((b: any) => b.status !== "mastered").map((bx: any) => (
+                            <div key={bx.id} className="rounded-xl bg-white p-2.5 ring-1 ring-amber-100">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[0.7rem] font-extrabold text-[#22332a]">{bx.name}</span>
+                                <span className="text-[0.58rem] font-black" style={{ color: bx.status === "gap" ? "#b91c1c" : "#b45309" }}>{bx.status === "gap" ? "فاقد تعليمي" : "تحتاج انتباهاً"}</span>
+                              </div>
+                              <p className="mt-1 text-[0.6rem] font-semibold leading-relaxed text-[#5c6f65]">{teachingAction(bx)}</p>
+                            </div>
+                          ))}
+                          {mastery.boxes.filter((b: any) => b.status !== "mastered").length === 0 && <p className="py-3 text-center text-[0.62rem] font-bold text-[#8a968d]">كل المهارات مُتقنة — واصل التعزيز 🎉</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* تغذية راجعة للأسرة (زر شامل) */}
+                  <div className="mt-3 rounded-2xl border border-[#eef0ea] bg-[#fbfbf8] p-3">
+                    <div className="mb-2 flex items-center gap-2 text-[0.72rem] font-black text-[#0a4630]"><Home size={14} /> تغذية راجعة للأسرة — إرسال جماعي لكل الطلاب</div>
+                    <button onClick={() => {
+                      const items = mastery.students.filter((s: any) => (s.guardianPhone ?? "").replace(/\D/g, "").length >= 9).map((s: any) => ({ name: s.name, link: channelLink(waChannel, s.guardianPhone ?? "", familyMessage(s)) }));
+                      const ok = items.filter((x: any) => x.link);
+                      if (ok.length === 0) { toast("لا يوجد طلاب برقم جوال", "error"); return; }
+                      setWaQueue(ok); setWaQi(0); window.open(ok[0].link, "_blank", "noopener,noreferrer");
+                      toast(`بدأ إرسال التغذية الراجعة — ${ok.length} رسالة`);
+                    }} className={`btn !text-white ${waChannel === "sms" ? "!bg-[#0a4630]" : "!bg-[#25d366]"}`}>
+                      {waChannel === "sms" ? <Smartphone size={16} /> : <MessageCircle size={16} />} إرسال تغذية راجعة لكل أولياء الأمور ({mastery.students.filter((s: any) => (s.guardianPhone ?? "").replace(/\D/g, "").length >= 9).length})
+                    </button>
+                  </div>
+
+                  <SignatureRow teacher={teacher} />
+                </>
+              )}
             </div>
           )}
 

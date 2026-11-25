@@ -125,7 +125,8 @@ export async function GET(req: Request) {
         const max = Number(c.max_score);
         const avg = vals.length ? vals.reduce((a, v) => a + v, 0) / vals.length : 0;
         const mastery = vals.length && max > 0 ? (vals.filter((v) => v / max >= 0.6).length / vals.length) * 100 : 0;
-        return { id: c.id, name: c.name, category: c.category, max, avg, top: vals.length ? Math.max(...vals) : 0, low: vals.length ? Math.min(...vals) : 0, mastery, filled: vals.length };
+        const pass50 = vals.length && max > 0 ? (vals.filter((v) => v / max >= 0.5).length / vals.length) * 100 : 0;
+        return { id: c.id, name: c.name, category: c.category, max, avg, top: vals.length ? Math.max(...vals) : 0, low: vals.length ? Math.min(...vals) : 0, mastery, pass50, filled: vals.length };
       });
 
       result.push({
